@@ -222,6 +222,15 @@ function handleShortcutInput(event, input) {
     if (input.shift) reopenClosedTab();
     else openNewTab();
     event.preventDefault();
+    return;
+  }
+
+  // Cmd+W: close the active tab (never the window/app). closeTab() keeps the
+  // last tab open, so this is a no-op on a single tab rather than quitting.
+  // Shift is excluded so Cmd+Shift+W still reaches the menu's Close Window.
+  if (primary && !input.shift && input.code === 'KeyW') {
+    closeTab(activeTabId);
+    event.preventDefault();
   }
 }
 
@@ -234,8 +243,11 @@ function buildAppMenu() {
       submenu: [
         { label: 'New Tab', accelerator: 'CmdOrCtrl+T', click: () => openNewTab() },
         { label: 'Reopen Closed Tab', accelerator: 'CmdOrCtrl+Shift+T', click: () => reopenClosedTab() },
+        { label: 'Close Tab', accelerator: 'CmdOrCtrl+W', click: () => closeTab(activeTabId) },
         { type: 'separator' },
-        isMac ? { role: 'close' } : { role: 'quit' }
+        // Close Window moves to Cmd+Shift+W so Cmd+W closes the active tab, not
+        // the window. On non-mac, keep Quit here.
+        ...(isMac ? [{ role: 'close', accelerator: 'CmdOrCtrl+Shift+W' }] : [{ role: 'quit' }])
       ]
     },
     { role: 'editMenu' },
