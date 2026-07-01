@@ -522,7 +522,9 @@ function normalizeInputUrl(value) {
   // `host:port` (e.g. localhost:3000) looks scheme-like but is not; prepend https.
   const looksLikeHostPort = /^[a-z0-9.-]+:\d+(?:[/?#]|$)/i.test(raw);
   if (!looksLikeHostPort && /^[a-z][a-z0-9+.-]*:/i.test(raw)) return raw;
-  if (raw.includes('.') || raw.includes('localhost')) return `https://${raw}`;
+  // host:port always gets https (incl. single-label hosts like app:3000 that
+  // contain no dot); other bare hosts need a dot or localhost to qualify.
+  if (looksLikeHostPort || raw.includes('.') || raw.includes('localhost')) return `https://${raw}`;
   return `https://www.google.com/search?q=${encodeURIComponent(raw)}`;
 }
 
