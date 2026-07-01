@@ -4,84 +4,101 @@
     <meta charset="UTF-8" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:"
+      content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:; font-src 'self'"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Side by Side Browser</title>
-    <link rel="stylesheet" href="./chrome.css" />
+    <link rel="stylesheet" href="./vendor/bootstrap-icons/bootstrap-icons.min.css" />
+    <link rel="stylesheet" href="./styles/app.css" />
   </head>
   <body>
     <div id="app">
-      <header class="app-toolbar">
-        <div class="brand">Side by Side Browser</div>
-        <label class="toggle">
-          <input data-annotate="toggle-scroll-sync" id="scrollSync" type="checkbox" />
+      <header class="flex items-center gap-4 h-[38px] px-3 border-b border-line bg-toolbar whitespace-nowrap">
+        <label class="inline-flex items-center gap-1.5 text-muted select-none">
+          <input data-annotate="toggle-scroll-sync" id="scrollSync" type="checkbox" class="w-[15px] h-[15px] accent-accent" />
           <span>Scroll sync</span>
         </label>
-        <label class="toggle">
-          <input data-annotate="toggle-path-sync" id="pathSync" type="checkbox" />
+        <label class="inline-flex items-center gap-1.5 text-muted select-none">
+          <input data-annotate="toggle-path-sync" id="pathSync" type="checkbox" class="w-[15px] h-[15px] accent-accent" />
           <span>URL path sync</span>
         </label>
-        <label class="toggle">
-          <input data-annotate="toggle-lock-external" id="lockExternal" type="checkbox" />
+        <label class="inline-flex items-center gap-1.5 text-muted select-none">
+          <input data-annotate="toggle-lock-external" id="lockExternal" type="checkbox" class="w-[15px] h-[15px] accent-accent" />
           <span>Block external navigation</span>
         </label>
       </header>
 
-      <nav class="tab-bar">
-        <div data-annotate="tab-list" class="tabs" id="tabs"></div>
-        <button data-annotate="button-new-tab" class="icon-button" id="newTab" title="New tab">+</button>
+      <nav class="flex items-end gap-1.5 h-[38px] px-2 pt-[5px] border-b border-line bg-tabbar">
+        <div data-annotate="tab-list" class="flex items-end gap-1 min-w-0 flex-1 h-full overflow-hidden" id="tabs"></div>
+        <button data-annotate="button-new-tab" class="icon-button" id="newTab" title="New tab" aria-label="New tab">
+          <i class="bi bi-plus-lg" aria-hidden="true"></i>
+        </button>
       </nav>
 
-      <section class="pane-toolbars">
-        <form data-pane="left" class="browser-toolbar" id="leftToolbar">
-          <button data-action="back" data-annotate="button-left-back" class="icon-button" title="Back" type="button">
-            &lt;
+      <section class="flex h-[52px] border-b border-strong-line bg-panel">
+        <form data-pane="left" class="flex items-center gap-1.5 w-1/2 min-w-0 p-2" id="leftToolbar">
+          <button data-action="back" data-annotate="button-left-back" class="icon-button" title="Back" aria-label="Back" type="button">
+            <i class="bi bi-chevron-left" aria-hidden="true"></i>
           </button>
           <button
             data-action="forward"
             data-annotate="button-left-forward"
             class="icon-button"
             title="Forward"
+            aria-label="Forward"
             type="button"
           >
-            &gt;
+            <i class="bi bi-chevron-right" aria-hidden="true"></i>
           </button>
-          <button data-action="reload" data-annotate="button-left-reload" class="icon-button" title="Reload" type="button">
-            R
+          <button data-action="reload" data-annotate="button-left-reload" class="icon-button" title="Reload" aria-label="Reload" type="button">
+            <i class="bi bi-arrow-clockwise" aria-hidden="true"></i>
           </button>
-          <button data-action="home" data-annotate="button-left-home" class="icon-button" title="Home" type="button">
-            H
+          <button data-action="home" data-annotate="button-left-home" class="icon-button" title="Home" aria-label="Home" type="button">
+            <i class="bi bi-house" aria-hidden="true"></i>
           </button>
-          <input data-annotate="input-left-url" id="leftUrl" spellcheck="false" autocomplete="off" />
-          <button data-annotate="button-left-go" class="go-button" type="submit">Go</button>
+          <input
+            data-annotate="input-left-url"
+            id="leftUrl"
+            spellcheck="false"
+            autocomplete="off"
+            class="min-w-[120px] flex-1 h-[30px] px-[9px] rounded-md border border-line bg-input text-text focus:border-accent focus:[outline:2px_solid_var(--color-accent-soft)]"
+          />
         </form>
 
-        <form data-pane="right" class="browser-toolbar" id="rightToolbar">
-          <button data-action="back" data-annotate="button-right-back" class="icon-button" title="Back" type="button">
-            &lt;
+        <form data-pane="right" class="flex items-center gap-1.5 w-1/2 min-w-0 p-2 border-l-2 border-strong-line" id="rightToolbar">
+          <button data-action="back" data-annotate="button-right-back" class="icon-button" title="Back" aria-label="Back" type="button">
+            <i class="bi bi-chevron-left" aria-hidden="true"></i>
           </button>
           <button
             data-action="forward"
             data-annotate="button-right-forward"
             class="icon-button"
             title="Forward"
+            aria-label="Forward"
             type="button"
           >
-            &gt;
+            <i class="bi bi-chevron-right" aria-hidden="true"></i>
           </button>
-          <button data-action="reload" data-annotate="button-right-reload" class="icon-button" title="Reload" type="button">
-            R
+          <button data-action="reload" data-annotate="button-right-reload" class="icon-button" title="Reload" aria-label="Reload" type="button">
+            <i class="bi bi-arrow-clockwise" aria-hidden="true"></i>
           </button>
-          <button data-action="home" data-annotate="button-right-home" class="icon-button" title="Home" type="button">
-            H
+          <button data-action="home" data-annotate="button-right-home" class="icon-button" title="Home" aria-label="Home" type="button">
+            <i class="bi bi-house" aria-hidden="true"></i>
           </button>
-          <input data-annotate="input-right-url" id="rightUrl" spellcheck="false" autocomplete="off" />
-          <button data-annotate="button-right-go" class="go-button" type="submit">Go</button>
+          <input
+            data-annotate="input-right-url"
+            id="rightUrl"
+            spellcheck="false"
+            autocomplete="off"
+            class="min-w-[120px] flex-1 h-[30px] px-[9px] rounded-md border border-line bg-input text-text focus:border-accent focus:[outline:2px_solid_var(--color-accent-soft)]"
+          />
         </form>
       </section>
     </div>
-    <div class="toast-stack" id="toasts"></div>
+    <div
+      class="fixed top-2.5 right-2.5 z-50 flex flex-col gap-2 w-[min(420px,calc(100vw-20px))] pointer-events-none"
+      id="toasts"
+    ></div>
     <script src="./chrome.js"></script>
   </body>
 </html>

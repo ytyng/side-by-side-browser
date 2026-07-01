@@ -1,0 +1,138 @@
+@import 'tailwindcss';
+
+/* Only the app chrome (this HTML/JS) is scanned. Remote pages never load this. */
+@source '../chrome.html';
+@source '../chrome.js';
+
+/* Dark theme tokens. Exposed as Tailwind color utilities (bg-*, text-*, border-*). */
+@theme {
+  --color-bg: #1c1d20;
+  --color-panel: #2a2c30;
+  --color-line: #3a3c40;
+  --color-strong-line: #4a4d52;
+  --color-text: #e3e4e6;
+  --color-muted: #9a9da3;
+  --color-accent: #4db6ac;
+  --color-accent-soft: rgba(77, 182, 172, 0.25);
+  --color-danger: #e0705a;
+  --color-toolbar: #232427;
+  --color-tabbar: #1f2023;
+  --color-tab: #26282c;
+  --color-hover: #3a3c40;
+  --color-input: #191a1d;
+}
+
+@layer base {
+  html,
+  body,
+  #app {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+  }
+
+  body {
+    color-scheme: dark;
+    background: var(--color-bg);
+    color: var(--color-text);
+    font-family:
+      Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 13px;
+  }
+}
+
+/*
+ * Repeated / JS-created widgets stay as semantic component classes so chrome.js
+ * can attach them without long utility strings. Layout containers use utilities
+ * directly in chrome.html.
+ */
+@layer components {
+  .icon-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    flex: 0 0 30px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--color-muted);
+  }
+
+  .icon-button .bi {
+    font-size: 16px;
+    line-height: 1;
+  }
+
+  .icon-button:hover:not(:disabled) {
+    background: var(--color-hover);
+  }
+
+  .icon-button:disabled {
+    color: #55585e;
+    background: transparent;
+  }
+
+  .tab {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 210px;
+    max-width: 23vw;
+    height: 32px;
+    padding: 0 8px 0 10px;
+    border: 1px solid var(--color-line);
+    border-bottom: 0;
+    border-radius: 7px 7px 0 0;
+    background: var(--color-tab);
+    color: var(--color-muted);
+  }
+
+  .tab.active {
+    background: var(--color-panel);
+    color: var(--color-text);
+    font-weight: 650;
+  }
+
+  .tab-title {
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .tab-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: inherit;
+  }
+
+  .tab-close .bi {
+    font-size: 12px;
+    line-height: 1;
+  }
+
+  .tab-close:hover {
+    background: var(--color-hover);
+  }
+
+  .toast {
+    padding: 10px 12px;
+    border: 1px solid #4a3a34;
+    border-left: 4px solid var(--color-danger);
+    border-radius: 7px;
+    background: #2a221f;
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.45);
+    color: var(--color-text);
+    line-height: 1.35;
+  }
+}

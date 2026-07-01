@@ -59,7 +59,7 @@ function createWindow() {
     minWidth: 900,
     minHeight: 560,
     title: 'Side by Side Browser',
-    backgroundColor: '#f5f5f2'
+    backgroundColor: '#1c1d20'
   });
 
   if (cli.startMaximized) mainWindow.maximize();

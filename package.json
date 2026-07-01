@@ -6,13 +6,15 @@
   "type": "commonjs",
   "packageManager": "pnpm@10.26.0",
   "scripts": {
-    "start": "electron .",
-    "dev": "electron . --open-devtools",
+    "tw:build": "tailwindcss -i ./src/styles/tailwind.css -o ./src/styles/app.css --minify",
+    "tw:watch": "tailwindcss -i ./src/styles/tailwind.css -o ./src/styles/app.css --watch",
+    "start": "pnpm run tw:build && electron .",
+    "dev": "pnpm run tw:build && electron . --open-devtools",
     "check": "node --check src/main.js && node --check src/chrome-preload.js && node --check src/remote-preload.js && node --check src/chrome.js",
-    "app:dir": "electron-builder --dir",
-    "app:dist": "electron-builder",
-    "pack": "electron-builder --dir",
-    "dist": "electron-builder"
+    "app:dir": "pnpm run tw:build && electron-builder --dir",
+    "app:dist": "pnpm run tw:build && electron-builder",
+    "pack": "pnpm run tw:build && electron-builder --dir",
+    "dist": "pnpm run tw:build && electron-builder"
   },
   "keywords": [
     "browser",
@@ -23,8 +25,11 @@
   "author": "Yotsuyanagi",
   "license": "MIT",
   "devDependencies": {
+    "@tailwindcss/cli": "^4.3.1",
+    "bootstrap-icons": "^1.13.1",
     "electron": "^42.5.0",
-    "electron-builder": "^26.0.12"
+    "electron-builder": "^26.0.12",
+    "tailwindcss": "^4.3.1"
   },
   "build": {
     "appId": "com.ytyng.side-by-side-browser",
