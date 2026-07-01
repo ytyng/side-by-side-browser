@@ -56,6 +56,7 @@ The app has one native webview pair per tab.
 - URL path sync copies pathname, search, and hash from one pane to the other while preserving the other pane's origin.
 - Scroll sync uses injected JavaScript and delta scrolling.
 - External navigation blocking uses exact hostname matching.
+- The three sync toggles (`scrollSync`, `pathSync`, `lockExternal`) are persisted to `userData/settings.json` via `src/settings.js` and restored on the next launch. Persisted values are the base at startup; CLI flags (`--scroll-sync` etc.) only force an option on for that session, and a UI toggle persists just the changed key. `settings.js` reads with a key allowlist + boolean validation and writes atomically (temp file + rename).
 
 Known limits:
 
