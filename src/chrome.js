@@ -93,7 +93,11 @@ function renderTabs() {
     close.className = 'tab-close';
     close.type = 'button';
     close.title = 'Close tab';
-    close.textContent = 'x';
+    close.setAttribute('aria-label', 'Close tab');
+    const closeIcon = document.createElement('i');
+    closeIcon.className = 'bi bi-x-lg';
+    closeIcon.setAttribute('aria-hidden', 'true');
+    close.append(closeIcon);
     close.dataset.annotate = `button-close-${tab.id}`;
     close.disabled = state.tabs.length <= 1;
     close.addEventListener('click', (event) => {
@@ -117,12 +121,18 @@ function renderToolbar(pane) {
   const toolbar = pane === 'left' ? elements.leftToolbar : elements.rightToolbar;
   const back = toolbar.querySelector('[data-action="back"]');
   const forward = toolbar.querySelector('[data-action="forward"]');
-  const reload = toolbar.querySelector('[data-action="reload"]');
+  // data-action toggles reload<->stop while loading, so match both to stay findable.
+  const reload = toolbar.querySelector('[data-action="reload"], [data-action="stop"]');
   back.disabled = !tab.canGoBack[pane];
   forward.disabled = !tab.canGoForward[pane];
-  reload.textContent = tab.loading[pane] ? 'X' : 'R';
-  reload.dataset.action = tab.loading[pane] ? 'stop' : 'reload';
-  reload.title = tab.loading[pane] ? 'Stop' : 'Reload';
+  const loading = tab.loading[pane];
+  const reloadIcon = reload.querySelector('i');
+  if (reloadIcon) {
+    reloadIcon.className = loading ? 'bi bi-x-lg' : 'bi bi-arrow-clockwise';
+  }
+  reload.dataset.action = loading ? 'stop' : 'reload';
+  reload.title = loading ? 'Stop' : 'Reload';
+  reload.setAttribute('aria-label', loading ? 'Stop' : 'Reload');
 }
 
 function activeTab() {
