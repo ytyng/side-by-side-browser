@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Side by Side Browser</title>
+    <link rel="stylesheet" href="./chrome.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="app-toolbar">
+        <div class="brand">Side by Side Browser</div>
+        <label class="toggle">
+          <input data-annotate="toggle-scroll-sync" id="scrollSync" type="checkbox" />
+          <span>Scroll sync</span>
+        </label>
+        <label class="toggle">
+          <input data-annotate="toggle-path-sync" id="pathSync" type="checkbox" />
+          <span>URL path sync</span>
+        </label>
+        <label class="toggle">
+          <input data-annotate="toggle-lock-external" id="lockExternal" type="checkbox" />
+          <span>Block external navigation</span>
+        </label>
+      </header>
+
+      <nav class="tab-bar">
+        <div data-annotate="tab-list" class="tabs" id="tabs"></div>
+        <button data-annotate="button-new-tab" class="icon-button" id="newTab" title="New tab">+</button>
+      </nav>
+
+      <section class="pane-toolbars">
+        <form data-pane="left" class="browser-toolbar" id="leftToolbar">
+          <button data-action="back" data-annotate="button-left-back" class="icon-button" title="Back" type="button">
+            &lt;
+          </button>
+          <button
+            data-action="forward"
+            data-annotate="button-left-forward"
+            class="icon-button"
+            title="Forward"
+            type="button"
+          >
+            &gt;
+          </button>
+          <button data-action="reload" data-annotate="button-left-reload" class="icon-button" title="Reload" type="button">
+            R
+          </button>
+          <button data-action="home" data-annotate="button-left-home" class="icon-button" title="Home" type="button">
+            H
+          </button>
+          <input data-annotate="input-left-url" id="leftUrl" spellcheck="false" autocomplete="off" />
+          <button data-annotate="button-left-go" class="go-button" type="submit">Go</button>
+        </form>
+
+        <form data-pane="right" class="browser-toolbar" id="rightToolbar">
+          <button data-action="back" data-annotate="button-right-back" class="icon-button" title="Back" type="button">
+            &lt;
+          </button>
+          <button
+            data-action="forward"
+            data-annotate="button-right-forward"
+            class="icon-button"
+            title="Forward"
+            type="button"
+          >
+            &gt;
+          </button>
+          <button data-action="reload" data-annotate="button-right-reload" class="icon-button" title="Reload" type="button">
+            R
+          </button>
+          <button data-action="home" data-annotate="button-right-home" class="icon-button" title="Home" type="button">
+            H
+          </button>
+          <input data-annotate="input-right-url" id="rightUrl" spellcheck="false" autocomplete="off" />
+          <button data-annotate="button-right-go" class="go-button" type="submit">Go</button>
+        </form>
+      </section>
+    </div>
+    <div class="toast-stack" id="toasts"></div>
+    <script src="./chrome.js"></script>
+  </body>
+</html>

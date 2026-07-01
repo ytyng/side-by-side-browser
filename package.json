@@ -1,0 +1,42 @@
+{
+  "name": "side-by-side-browser",
+  "version": "0.1.0",
+  "description": "A two-pane browser for comparing before/after migration pages.",
+  "main": "src/main.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --open-devtools",
+    "check": "node --check src/main.js && node --check src/chrome-preload.js && node --check src/remote-preload.js && node --check src/chrome.js",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder"
+  },
+  "keywords": [
+    "browser",
+    "compare",
+    "migration",
+    "electron"
+  ],
+  "author": "Yotsuyanagi",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^42.5.0",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "com.ytyng.side-by-side-browser",
+    "productName": "Side by Side Browser",
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "identity": null
+    }
+  },
+  "allowScripts": {
+    "electron@42.5.0": true,
+    "electron-winstaller@5.4.0": true
+  }
+}
