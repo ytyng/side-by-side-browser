@@ -299,16 +299,26 @@ function handleNavigated(tabId, pane, url) {
   }, 500);
 }
 
+// Normalize a scroll ratio to 0..1, preserving null (axis not scrollable on the
+// sender) so the receiving pane leaves that axis untouched.
+function normalizePercent(value) {
+  if (value === null || value === undefined) return null;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  if (n < 0) return 0;
+  if (n > 1) return 1;
+  return n;
+}
+
 function handlePaneScroll(payload) {
   if (!syncState.scrollSync || !payload || payload.tabId !== activeTabId) return;
   const tab = getActiveTab();
   if (!tab || !PANE_NAMES.includes(payload.pane)) return;
   const targetPane = payload.pane === 'left' ? 'right' : 'left';
   const target = tab.views[targetPane];
-  const dx = Number(payload.dx) || 0;
-  const dy = Number(payload.dy) || 0;
-  if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
-  target.webContents.send('sync-scroll-by', { dx, dy });
+  const percentX = normalizePercent(payload.percentX);
+  const percentY = normalizePercent(payload.percentY);
+  target.webContents.send('sync-scroll-to', { percentX, percentY });
 }
 
 function updateLoading(tabId, pane, loading) {
@@ -529,7 +539,7 @@ Usage:
 Options:
   --left <url>             Left pane URL. Overrides the first positional URL.
   --right <url>            Right pane URL. Overrides the second positional URL.
-  --scroll-sync            Enable scroll delta synchronization on launch.
+  --scroll-sync            Enable percentage-based scroll synchronization on launch.
   --path-sync              Enable URL path/search/hash synchronization on launch.
   --lock-external          Block navigations that change hostname.
   --width <px>             Initial window width. Default: 1440.
