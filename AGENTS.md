@@ -57,6 +57,8 @@ The app has one native webview pair per tab.
 - Scroll sync uses injected JavaScript and delta scrolling.
 - External navigation blocking uses exact hostname matching.
 - The three sync toggles (`scrollSync`, `pathSync`, `lockExternal`) are persisted to `userData/settings.json` via `src/settings.js` and restored on the next launch. Persisted values are the base at startup; CLI flags (`--scroll-sync` etc.) only force an option on for that session, and a UI toggle persists just the changed key. `settings.js` reads with a key allowlist + boolean validation and writes atomically (temp file + rename).
+- Tab keyboard shortcuts: `Cmd+T` new tab (both panes open `about:blank`), `Cmd+Shift+T` reopen the most recently closed tab, `Ctrl+Tab` / `Ctrl+Shift+Tab` cycle next / previous. They are wired **twice on purpose**: an application menu (accelerators, in `buildAppMenu()`) plus a `before-input-event` handler (`handleShortcutInput`) attached to every `webContents` (chrome + each pane). On macOS a menu accelerator can fail to fire while focus is inside a page `WebContentsView`, so the `before-input-event` fallback is required. `before-input-event` fires *before* the menu accelerator, so its `preventDefault()` also suppresses the menu shortcut — do not "simplify" by dropping one path, and keep both in sync when adding shortcuts.
+- The closed-tab stack (`closedTabs`, bounded by `MAX_CLOSED_TABS`) stores each closed tab's left/right URLs for `Cmd+Shift+T`.
 
 Known limits:
 
