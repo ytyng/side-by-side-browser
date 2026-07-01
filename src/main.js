@@ -1,6 +1,7 @@
 const { app, BaseWindow, WebContentsView, View, ipcMain, shell } = require('electron');
 const path = require('node:path');
 const pkg = require('../package.json');
+const { loadOptions, saveOptions } = require('./settings');
 
 const CONTROL_HEIGHT = 128;
 const MIN_PANE_WIDTH = 320;
@@ -36,12 +37,6 @@ if (cli.version) {
   process.exit(0);
 }
 
-syncState = {
-  scrollSync: cli.scrollSync,
-  pathSync: cli.pathSync,
-  lockExternal: cli.lockExternal
-};
-
 app.whenReady().then(() => {
   createWindow();
 });
@@ -55,6 +50,15 @@ app.on('activate', () => {
 });
 
 function createWindow() {
+  // Persisted options are the base; CLI flags can only force an option on for
+  // this session and are not written back to disk unless the user toggles later.
+  const persisted = loadOptions();
+  syncState = {
+    scrollSync: persisted.scrollSync || cli.scrollSync,
+    pathSync: persisted.pathSync || cli.pathSync,
+    lockExternal: persisted.lockExternal || cli.lockExternal
+  };
+
   mainWindow = new BaseWindow({
     width: cli.width,
     height: cli.height,
@@ -129,6 +133,11 @@ function registerIpc() {
   ipcMain.handle('set-option', (_event, { key, value }) => {
     if (Object.prototype.hasOwnProperty.call(syncState, key)) {
       syncState[key] = Boolean(value);
+      // Persist only the toggled key by merging onto the on-disk value, so a
+      // CLI-forced option on another key never leaks into the saved settings.
+      const persisted = loadOptions();
+      persisted[key] = syncState[key];
+      saveOptions(persisted);
       sendState();
     }
     return getSerializableState();
