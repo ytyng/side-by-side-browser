@@ -54,6 +54,7 @@ Weakening these settings is not a harmless refactor. A migration comparison brow
 The app has one native webview pair per tab.
 
 - URL path sync copies pathname, search, and hash from one pane to the other while preserving the other pane's origin.
+- Address-bar input is normalized by `normalizeInputUrl` before loading: a real scheme (`http://`, `about:blank`, `file://`) is kept as-is; a `host:port` shape (`localhost:3000`, `app:3000` — matched *before* the scheme check because it would otherwise be misread as a scheme) and any bare host with a dot or `localhost` get `https://` prepended; everything else becomes a Google search. When editing the scheme/host-port predicates, keep `looksLikeHostPort` in **both** the scheme guard and the prepend condition, or single-label `host:port` inputs silently fall through to a search.
 - Scroll sync uses injected JavaScript and delta scrolling.
 - External navigation blocking uses exact hostname matching.
 - The three sync toggles (`scrollSync`, `pathSync`, `lockExternal`) are persisted to `userData/settings.json` via `src/settings.js` and restored on the next launch. Persisted values are the base at startup; CLI flags (`--scroll-sync` etc.) only force an option on for that session, and a UI toggle persists just the changed key. `settings.js` reads with a key allowlist + boolean validation and writes atomically (temp file + rename).
