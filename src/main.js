@@ -435,7 +435,9 @@ function getActiveTab() {
 function normalizeInputUrl(value) {
   const raw = String(value || '').trim();
   if (!raw) return DEFAULT_LEFT_URL;
-  if (/^[a-z][a-z0-9+.-]*:/i.test(raw)) return raw;
+  // `host:port` (e.g. localhost:3000) looks scheme-like but is not; prepend https.
+  const looksLikeHostPort = /^[a-z0-9.-]+:\d+(?:[/?#]|$)/i.test(raw);
+  if (!looksLikeHostPort && /^[a-z][a-z0-9+.-]*:/i.test(raw)) return raw;
   if (raw.includes('.') || raw.includes('localhost')) return `https://${raw}`;
   return `https://www.google.com/search?q=${encodeURIComponent(raw)}`;
 }
