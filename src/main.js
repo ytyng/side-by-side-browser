@@ -1,9 +1,10 @@
-const { app, BaseWindow, WebContentsView, ipcMain, shell } = require('electron');
+const { app, BaseWindow, WebContentsView, View, ipcMain, shell } = require('electron');
 const path = require('node:path');
 const pkg = require('../package.json');
 
 const CONTROL_HEIGHT = 128;
 const MIN_PANE_WIDTH = 320;
+const DIVIDER_WIDTH = 1;
 const DEFAULT_LEFT_URL = 'https://example.com';
 const DEFAULT_RIGHT_URL = 'https://example.org';
 
@@ -11,6 +12,7 @@ const PANE_NAMES = ['left', 'right'];
 
 let mainWindow;
 let chromeView;
+let dividerView;
 let activeTabId = null;
 let nextTabId = 1;
 let layout = { width: 1440, height: 950 };
@@ -75,6 +77,13 @@ function createWindow() {
 
   mainWindow.contentView.addChildView(chromeView);
   chromeView.webContents.loadFile(path.join(__dirname, 'chrome.html'));
+
+  // 1px divider that fills the gap reserved between the two page panes in
+  // relayout(). raiseDivider() also keeps it on top as a safety net in case the
+  // panes ever overlap it.
+  dividerView = new View();
+  dividerView.setBackgroundColor('#777777');
+  mainWindow.contentView.addChildView(dividerView);
 
   mainWindow.on('resize', relayout);
   mainWindow.on('closed', () => {
@@ -187,6 +196,7 @@ function createTab({ leftUrl, rightUrl, makeActive }) {
   tabs.set(id, tab);
   mainWindow.contentView.addChildView(tab.views.left);
   mainWindow.contentView.addChildView(tab.views.right);
+  raiseDivider();
 
   loadPane(tab, 'left', tab.urls.left);
   loadPane(tab, 'right', tab.urls.right);
@@ -349,17 +359,36 @@ function relayout() {
   const availableHeight = Math.max(1, bounds.height - CONTROL_HEIGHT);
   const half = Math.max(MIN_PANE_WIDTH, Math.floor(bounds.width / 2));
   const leftWidth = Math.min(half, bounds.width - MIN_PANE_WIDTH);
-  const rightWidth = bounds.width - leftWidth;
+  // Reserve a 1px column at x=leftWidth for the divider and shift the right pane
+  // over. Native WebContentsView layers can composite above a plain View, so the
+  // divider must sit in a real gap between the panes rather than overlap them.
+  const rightX = leftWidth + DIVIDER_WIDTH;
+  const rightWidth = Math.max(1, bounds.width - rightX);
 
+  let hasActivePanes = false;
   for (const [tabId, tab] of tabs) {
     if (tabId === activeTabId) {
       tab.views.left.setBounds({ x: 0, y: CONTROL_HEIGHT, width: leftWidth, height: availableHeight });
-      tab.views.right.setBounds({ x: leftWidth, y: CONTROL_HEIGHT, width: rightWidth, height: availableHeight });
+      tab.views.right.setBounds({ x: rightX, y: CONTROL_HEIGHT, width: rightWidth, height: availableHeight });
+      hasActivePanes = true;
     } else {
       tab.views.left.setBounds({ x: 0, y: 0, width: 0, height: 0 });
       tab.views.right.setBounds({ x: 0, y: 0, width: 0, height: 0 });
     }
   }
+
+  if (dividerView) {
+    dividerView.setVisible(hasActivePanes);
+    dividerView.setBounds({ x: leftWidth, y: CONTROL_HEIGHT, width: DIVIDER_WIDTH, height: availableHeight });
+  }
+}
+
+// Keep the divider above the page web contents, which are re-added on top when
+// tabs are created.
+function raiseDivider() {
+  if (!mainWindow || !dividerView) return;
+  mainWindow.contentView.removeChildView(dividerView);
+  mainWindow.contentView.addChildView(dividerView);
 }
 
 function sendState() {
