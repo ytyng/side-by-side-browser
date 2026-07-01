@@ -30,11 +30,7 @@ api.getState().then((nextState) => {
 });
 
 elements.newTab.addEventListener('click', () => {
-  const active = activeTab();
-  api.newTab({
-    leftUrl: active?.urls.left,
-    rightUrl: active?.urls.right
-  });
+  api.newTab();
 });
 
 for (const [key, element] of [

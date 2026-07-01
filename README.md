@@ -36,13 +36,22 @@ Options:
   --user-agent <ua>        Override page webview user agent.
   --partition <name>       Electron session partition. Default: side-by-side-browser.
   --no-persist-session     Use an in-memory session.
-  --home-left <url>        Home button URL for the left pane.
-  --home-right <url>       Home button URL for the right pane.
   --allow-popups           Allow popup windows. Default: blocked.
   --open-devtools          Open devtools for the app chrome and page views.
   --help                   Show help.
   --version                Show version.
 ```
+
+## Keyboard shortcuts
+
+| Shortcut | Action |
+| --- | --- |
+| `Cmd+T` | New tab (both panes open blank) |
+| `Cmd+Shift+T` | Reopen the most recently closed tab |
+| `Ctrl+Tab` | Next tab |
+| `Ctrl+Shift+Tab` | Previous tab |
+
+The same actions are available from the application menu (File / Tab).
 
 ## Build
 
