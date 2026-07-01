@@ -2,7 +2,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('sideBySide', {
   getState: () => ipcRenderer.invoke('get-state'),
-  newTab: (payload) => ipcRenderer.invoke('new-tab', payload),
+  newTab: () => ipcRenderer.invoke('new-tab'),
   selectTab: (tabId) => ipcRenderer.invoke('select-tab', tabId),
   closeTab: (tabId) => ipcRenderer.invoke('close-tab', tabId),
   setOption: (key, value) => ipcRenderer.invoke('set-option', { key, value }),

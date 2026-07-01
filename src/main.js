@@ -1,4 +1,4 @@
-const { app, BaseWindow, WebContentsView, View, ipcMain, shell } = require('electron');
+const { app, BaseWindow, WebContentsView, View, Menu, ipcMain, shell } = require('electron');
 const path = require('node:path');
 const pkg = require('../package.json');
 const { loadOptions, saveOptions } = require('./settings');
@@ -8,8 +8,10 @@ const MIN_PANE_WIDTH = 320;
 const DIVIDER_WIDTH = 1;
 const DEFAULT_LEFT_URL = 'https://example.com';
 const DEFAULT_RIGHT_URL = 'https://example.org';
+const BLANK_URL = 'about:blank';
 
 const PANE_NAMES = ['left', 'right'];
+const MAX_CLOSED_TABS = 25;
 
 let mainWindow;
 let chromeView;
@@ -24,6 +26,8 @@ let syncState = {
 };
 let isApplyingPathSync = false;
 const tabs = new Map();
+// Stack of { leftUrl, rightUrl } for closed tabs, most-recent last (Cmd+Shift+T).
+const closedTabs = [];
 
 const cli = parseCli(process.argv.slice(app.isPackaged ? 1 : 2));
 
@@ -38,6 +42,7 @@ if (cli.version) {
 }
 
 app.whenReady().then(() => {
+  Menu.setApplicationMenu(buildAppMenu());
   createWindow();
 });
 
@@ -80,6 +85,7 @@ function createWindow() {
   });
 
   mainWindow.contentView.addChildView(chromeView);
+  chromeView.webContents.on('before-input-event', handleShortcutInput);
   chromeView.webContents.loadFile(path.join(__dirname, 'chrome.html'));
 
   // 1px divider that fills the gap reserved between the two page panes in
@@ -111,11 +117,8 @@ function createWindow() {
 
 function registerIpc() {
   ipcMain.handle('get-state', () => getSerializableState());
-  ipcMain.handle('new-tab', (_event, payload = {}) => {
-    const current = getActiveTab();
-    const leftUrl = normalizeInputUrl(payload.leftUrl || current?.urls.left || DEFAULT_LEFT_URL);
-    const rightUrl = normalizeInputUrl(payload.rightUrl || current?.urls.right || DEFAULT_RIGHT_URL);
-    createTab({ leftUrl, rightUrl, makeActive: true });
+  ipcMain.handle('new-tab', () => {
+    openNewTab();
     return getSerializableState();
   });
   ipcMain.handle('select-tab', (_event, tabId) => {
@@ -160,7 +163,6 @@ function registerIpc() {
     }
     if (action === 'reload') view.webContents.reload();
     if (action === 'stop') view.webContents.stop();
-    if (action === 'home') loadPane(tab, pane, pane === 'left' ? cli.homeLeft : cli.homeRight);
     return getSerializableState();
   });
   ipcMain.handle('open-external', (_event, url) => {
@@ -169,6 +171,84 @@ function registerIpc() {
   ipcMain.on('pane-scroll', (_event, payload) => {
     handlePaneScroll(payload);
   });
+}
+
+function openNewTab() {
+  if (!mainWindow) return;
+  // New tabs open blank in both panes; the user then types each target URL.
+  createTab({ leftUrl: BLANK_URL, rightUrl: BLANK_URL, makeActive: true });
+}
+
+function reopenClosedTab() {
+  if (!mainWindow) return;
+  const restored = closedTabs.pop();
+  if (!restored) {
+    toast('No recently closed tab to reopen');
+    return;
+  }
+  createTab({ leftUrl: restored.leftUrl, rightUrl: restored.rightUrl, makeActive: true });
+}
+
+function cycleTab(direction) {
+  const ids = Array.from(tabs.keys());
+  if (ids.length <= 1) return;
+  const currentIndex = ids.indexOf(activeTabId);
+  const nextIndex = (currentIndex + direction + ids.length) % ids.length;
+  activeTabId = ids[nextIndex];
+  relayout();
+  sendState();
+}
+
+// Fallback for the menu accelerators: on macOS, menu accelerators can fail to
+// fire while keyboard focus is inside a page WebContentsView (the usual case
+// here), so mirror the shortcuts via before-input-event on every webContents.
+// before-input-event fires *before* the menu accelerator, so calling
+// event.preventDefault() here also suppresses the menu shortcut for the same
+// keypress — meaning the action never runs twice.
+function handleShortcutInput(event, input) {
+  if (input.type !== 'keyDown' || input.alt) return;
+  // Match the menu's CmdOrCtrl: Cmd on macOS, Ctrl elsewhere.
+  const primary = process.platform === 'darwin' ? input.meta : input.control;
+
+  // Ctrl+Tab / Ctrl+Shift+Tab: cycle to the next / previous tab.
+  if (input.control && !input.meta && input.code === 'Tab') {
+    cycleTab(input.shift ? -1 : 1);
+    event.preventDefault();
+    return;
+  }
+
+  // Cmd+T / Cmd+Shift+T: new tab / reopen the most-recently-closed tab.
+  if (primary && input.code === 'KeyT') {
+    if (input.shift) reopenClosedTab();
+    else openNewTab();
+    event.preventDefault();
+  }
+}
+
+function buildAppMenu() {
+  const isMac = process.platform === 'darwin';
+  const template = [
+    ...(isMac ? [{ role: 'appMenu' }] : []),
+    {
+      label: 'File',
+      submenu: [
+        { label: 'New Tab', accelerator: 'CmdOrCtrl+T', click: () => openNewTab() },
+        { label: 'Reopen Closed Tab', accelerator: 'CmdOrCtrl+Shift+T', click: () => reopenClosedTab() },
+        { type: 'separator' },
+        isMac ? { role: 'close' } : { role: 'quit' }
+      ]
+    },
+    { role: 'editMenu' },
+    {
+      label: 'Tab',
+      submenu: [
+        { label: 'Next Tab', accelerator: 'Control+Tab', click: () => cycleTab(1) },
+        { label: 'Previous Tab', accelerator: 'Control+Shift+Tab', click: () => cycleTab(-1) }
+      ]
+    },
+    { role: 'windowMenu' }
+  ];
+  return Menu.buildFromTemplate(template);
 }
 
 function createTab({ leftUrl, rightUrl, makeActive }) {
@@ -227,6 +307,8 @@ function createPaneView(tabId, pane) {
       partition: sessionPartition()
     }
   });
+
+  view.webContents.on('before-input-event', handleShortcutInput);
 
   if (cli.userAgent) view.webContents.setUserAgent(cli.userAgent);
 
@@ -348,6 +430,8 @@ function closeTab(tabId) {
   if (tabs.size <= 1) return;
   const tab = tabs.get(tabId);
   if (!tab) return;
+  closedTabs.push({ leftUrl: tab.urls.left, rightUrl: tab.urls.right });
+  if (closedTabs.length > MAX_CLOSED_TABS) closedTabs.shift();
   for (const pane of PANE_NAMES) {
     tab.views[pane].setBounds({ x: 0, y: 0, width: 0, height: 0 });
     tab.views[pane].webContents.close();
@@ -509,8 +593,6 @@ function parseCli(argv) {
     userAgent: null,
     partition: 'side-by-side-browser',
     persistSession: true,
-    homeLeft: DEFAULT_LEFT_URL,
-    homeRight: DEFAULT_RIGHT_URL,
     allowPopups: false,
     openDevtools: false
   };
@@ -537,10 +619,6 @@ function parseCli(argv) {
     else if (arg === '--partition') result.partition = argv[++index] || result.partition;
     else if (arg.startsWith('--partition=')) result.partition = arg.slice('--partition='.length) || result.partition;
     else if (arg === '--no-persist-session') result.persistSession = false;
-    else if (arg === '--home-left') result.homeLeft = normalizeInputUrl(argv[++index]);
-    else if (arg.startsWith('--home-left=')) result.homeLeft = normalizeInputUrl(arg.slice('--home-left='.length));
-    else if (arg === '--home-right') result.homeRight = normalizeInputUrl(argv[++index]);
-    else if (arg.startsWith('--home-right=')) result.homeRight = normalizeInputUrl(arg.slice('--home-right='.length));
     else if (arg === '--allow-popups') result.allowPopups = true;
     else if (arg === '--open-devtools') result.openDevtools = true;
     else if (arg.startsWith('-')) console.warn(`Unknown option: ${arg}`);
@@ -549,8 +627,6 @@ function parseCli(argv) {
 
   result.left = result.left ? normalizeInputUrl(result.left) : null;
   result.right = result.right ? normalizeInputUrl(result.right) : null;
-  result.homeLeft = normalizeInputUrl(result.homeLeft);
-  result.homeRight = normalizeInputUrl(result.homeRight);
   return result;
 }
 
@@ -578,8 +654,6 @@ Options:
   --user-agent <ua>        Override page webview user agent.
   --partition <name>       Electron session partition. Default: side-by-side-browser.
   --no-persist-session     Use an in-memory session.
-  --home-left <url>        Home button URL for the left pane.
-  --home-right <url>       Home button URL for the right pane.
   --allow-popups           Allow popup windows. Default: blocked.
   --open-devtools          Open devtools for the app chrome and page views.
   --help                   Show help.

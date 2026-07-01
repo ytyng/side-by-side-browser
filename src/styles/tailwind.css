@@ -114,11 +114,22 @@
     border-radius: 4px;
     background: transparent;
     color: inherit;
+    /* Hidden until the tab is hovered; opacity (not display) keeps tab width stable. */
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.12s ease;
   }
 
   .tab-close .bi {
     font-size: 12px;
     line-height: 1;
+  }
+
+  /* Reveal the close button only while hovering the tab (or focusing it via keyboard). */
+  .tab:hover .tab-close:not(:disabled),
+  .tab-close:not(:disabled):focus-visible {
+    opacity: 1;
+    pointer-events: auto;
   }
 
   .tab-close:hover {
