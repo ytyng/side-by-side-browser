@@ -48,6 +48,7 @@ Options:
 | --- | --- |
 | `Cmd+T` | New tab (both panes open blank) |
 | `Cmd+Shift+T` | Reopen the most recently closed tab |
+| `Cmd+W` | Close the active tab (no-op on the last tab; the app stays open) |
 | `Ctrl+Tab` | Next tab |
 | `Ctrl+Shift+Tab` | Previous tab |
 
