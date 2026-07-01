@@ -4,10 +4,13 @@
   "description": "A two-pane browser for comparing before/after migration pages.",
   "main": "src/main.js",
   "type": "commonjs",
+  "packageManager": "pnpm@10.26.0",
   "scripts": {
     "start": "electron .",
     "dev": "electron . --open-devtools",
     "check": "node --check src/main.js && node --check src/chrome-preload.js && node --check src/remote-preload.js && node --check src/chrome.js",
+    "app:dir": "electron-builder --dir",
+    "app:dist": "electron-builder",
     "pack": "electron-builder --dir",
     "dist": "electron-builder"
   },
@@ -38,5 +41,11 @@
   "allowScripts": {
     "electron@42.5.0": true,
     "electron-winstaller@5.4.0": true
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron",
+      "electron-winstaller"
+    ]
   }
 }

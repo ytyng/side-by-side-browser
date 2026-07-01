@@ -7,13 +7,13 @@ Electron is used instead of Tauri because this app needs two independent native 
 ## Install
 
 ```bash
-npm install
+pnpm install
 ```
 
 ## Run
 
 ```bash
-npm start -- https://old.example.com https://new.example.com
+pnpm start -- https://old.example.com https://new.example.com
 ```
 
 The first positional URL opens on the left. The second opens on the right.
@@ -22,7 +22,7 @@ The first positional URL opens on the left. The second opens on the right.
 
 ```text
 Usage:
-  npm start -- [options] [leftUrl] [rightUrl]
+  pnpm start -- [options] [leftUrl] [rightUrl]
 
 Options:
   --left <url>             Left pane URL. Overrides the first positional URL.
@@ -43,6 +43,24 @@ Options:
   --help                   Show help.
   --version                Show version.
 ```
+
+## Build
+
+```bash
+# Unpacked app directory for local testing:
+pnpm app:dir
+
+# Distributable binaries such as .dmg and .zip:
+pnpm app:dist
+```
+
+The output is written under `dist/`.
+
+`pnpm app:dir` creates `dist/mac-arm64/Side by Side Browser.app`.
+`pnpm app:dist` creates distributable artifacts in `dist/`.
+`pnpm run pack` and `pnpm run dist` are aliases for those two commands.
+
+macOS code signing is disabled for local builds. That avoids keychain/signing stalls, but distributed builds may show Gatekeeper warnings.
 
 ## Limits
 
