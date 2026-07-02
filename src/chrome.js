@@ -6,8 +6,11 @@ const elements = {
   tabs: document.getElementById('tabs'),
   newTab: document.getElementById('newTab'),
   scrollSync: document.getElementById('scrollSync'),
+  scrollSyncMode: document.getElementById('scrollSyncMode'),
   pathSync: document.getElementById('pathSync'),
   lockExternal: document.getElementById('lockExternal'),
+  openLinksNewTab: document.getElementById('openLinksNewTab'),
+  copyComparison: document.getElementById('copyComparison'),
   leftUrl: document.getElementById('leftUrl'),
   rightUrl: document.getElementById('rightUrl'),
   leftToolbar: document.getElementById('leftToolbar'),
@@ -33,15 +36,34 @@ elements.newTab.addEventListener('click', () => {
   api.newTab();
 });
 
+// Copy the comparison, then flip the icon to a checkmark for 3 seconds. The
+// button lives in static header markup, so render() never resets the icon.
+let copyResetTimer = null;
+elements.copyComparison.addEventListener('click', async () => {
+  await api.copyComparison();
+  const icon = elements.copyComparison.querySelector('i');
+  if (icon) icon.className = 'bi bi-check-lg';
+  if (copyResetTimer) clearTimeout(copyResetTimer);
+  copyResetTimer = setTimeout(() => {
+    if (icon) icon.className = 'bi bi-clipboard';
+    copyResetTimer = null;
+  }, 3000);
+});
+
 for (const [key, element] of [
   ['scrollSync', elements.scrollSync],
   ['pathSync', elements.pathSync],
-  ['lockExternal', elements.lockExternal]
+  ['lockExternal', elements.lockExternal],
+  ['openLinksNewTab', elements.openLinksNewTab]
 ]) {
   element.addEventListener('change', () => {
     api.setOption(key, element.checked);
   });
 }
+
+elements.scrollSyncMode.addEventListener('change', () => {
+  api.setOption('scrollSyncMode', elements.scrollSyncMode.value);
+});
 
 for (const toolbar of [elements.leftToolbar, elements.rightToolbar]) {
   toolbar.addEventListener('submit', (event) => {
@@ -68,8 +90,10 @@ function render() {
 
 function renderOptions() {
   elements.scrollSync.checked = state.options.scrollSync;
+  elements.scrollSyncMode.value = state.options.scrollSyncMode === 'percent' ? 'percent' : 'px';
   elements.pathSync.checked = state.options.pathSync;
   elements.lockExternal.checked = state.options.lockExternal;
+  elements.openLinksNewTab.checked = state.options.openLinksNewTab;
 }
 
 function renderTabs() {

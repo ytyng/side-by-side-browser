@@ -14,10 +14,21 @@
   <body>
     <div id="app">
       <header class="flex items-center gap-4 h-[38px] px-3 border-b border-line bg-toolbar whitespace-nowrap">
-        <label class="inline-flex items-center gap-1.5 text-muted select-none">
-          <input data-annotate="toggle-scroll-sync" id="scrollSync" type="checkbox" class="w-[15px] h-[15px] accent-accent" />
-          <span>Scroll sync</span>
-        </label>
+        <div class="inline-flex items-center gap-1.5">
+          <label class="inline-flex items-center gap-1.5 text-muted select-none">
+            <input data-annotate="toggle-scroll-sync" id="scrollSync" type="checkbox" class="w-[15px] h-[15px] accent-accent" />
+            <span>Scroll sync</span>
+          </label>
+          <select
+            data-annotate="select-scroll-sync-mode"
+            id="scrollSyncMode"
+            title="Scroll sync unit"
+            class="h-[22px] px-1 rounded border border-line bg-input text-muted focus:border-accent focus:outline-none"
+          >
+            <option value="px">px</option>
+            <option value="percent">%</option>
+          </select>
+        </div>
         <label class="inline-flex items-center gap-1.5 text-muted select-none">
           <input data-annotate="toggle-path-sync" id="pathSync" type="checkbox" class="w-[15px] h-[15px] accent-accent" />
           <span>URL path sync</span>
@@ -26,6 +37,20 @@
           <input data-annotate="toggle-lock-external" id="lockExternal" type="checkbox" class="w-[15px] h-[15px] accent-accent" />
           <span>Block external navigation</span>
         </label>
+        <label class="inline-flex items-center gap-1.5 text-muted select-none">
+          <input data-annotate="toggle-open-links-new-tab" id="openLinksNewTab" type="checkbox" class="w-[15px] h-[15px] accent-accent" />
+          <span>Open links in new tab</span>
+        </label>
+        <button
+          data-annotate="button-copy-comparison"
+          id="copyComparison"
+          class="icon-button ml-auto"
+          title="Copy titles and URLs"
+          aria-label="Copy titles and URLs"
+          type="button"
+        >
+          <i class="bi bi-clipboard" aria-hidden="true"></i>
+        </button>
       </header>
 
       <nav class="flex items-end gap-1.5 h-[38px] px-2 pt-[5px] border-b border-line bg-tabbar">

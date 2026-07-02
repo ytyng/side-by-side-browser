@@ -7,14 +7,24 @@ const SETTINGS_VERSION = 1;
 
 // Only these keys are read from / written to disk. Unknown keys on disk are
 // ignored so a tampered or stale file can never inject state into the app.
-const OPTION_KEYS = ['scrollSync', 'pathSync', 'lockExternal'];
+const OPTION_KEYS = ['scrollSync', 'pathSync', 'lockExternal', 'openLinksNewTab'];
+
+// Non-boolean option: the scroll sync unit. 'px' is the default.
+const SCROLL_SYNC_MODES = ['px', 'percent'];
+const DEFAULT_SCROLL_SYNC_MODE = 'px';
 
 function settingsFilePath() {
   return path.join(app.getPath('userData'), 'settings.json');
 }
 
 function defaultOptions() {
-  return { scrollSync: false, pathSync: false, lockExternal: false };
+  return {
+    scrollSync: false,
+    pathSync: false,
+    lockExternal: false,
+    openLinksNewTab: false,
+    scrollSyncMode: DEFAULT_SCROLL_SYNC_MODE
+  };
 }
 
 // Reads persisted sync options. Missing file, invalid JSON, or unexpected shape
@@ -28,6 +38,9 @@ function loadOptions() {
     if (stored && typeof stored === 'object') {
       for (const key of OPTION_KEYS) {
         if (typeof stored[key] === 'boolean') options[key] = stored[key];
+      }
+      if (SCROLL_SYNC_MODES.includes(stored.scrollSyncMode)) {
+        options.scrollSyncMode = stored.scrollSyncMode;
       }
     }
   } catch (error) {
@@ -45,6 +58,9 @@ function saveOptions(options) {
   for (const key of OPTION_KEYS) {
     payload.options[key] = Boolean(options[key]);
   }
+  payload.options.scrollSyncMode = SCROLL_SYNC_MODES.includes(options.scrollSyncMode)
+    ? options.scrollSyncMode
+    : DEFAULT_SCROLL_SYNC_MODE;
   const filePath = settingsFilePath();
   const tempPath = `${filePath}.tmp`;
   try {

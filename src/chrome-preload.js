@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('sideBySide', {
   navigate: (pane, url) => ipcRenderer.invoke('navigate', { pane, url }),
   go: (pane, action) => ipcRenderer.invoke('go', { pane, action }),
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
+  copyComparison: () => ipcRenderer.invoke('copy-comparison'),
   onState: (callback) => {
     ipcRenderer.on('state', (_event, state) => callback(state));
   },
