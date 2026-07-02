@@ -1,4 +1,4 @@
-const { app, BaseWindow, WebContentsView, View, Menu, ipcMain, shell } = require('electron');
+const { app, BaseWindow, WebContentsView, View, Menu, ipcMain, shell, clipboard } = require('electron');
 const path = require('node:path');
 const pkg = require('../package.json');
 const { loadOptions, saveOptions } = require('./settings');
@@ -22,7 +22,13 @@ let layout = { width: 1440, height: 950 };
 let syncState = {
   scrollSync: false,
   pathSync: false,
-  lockExternal: false
+  lockExternal: false,
+  // 'px' syncs the peer's absolute pixel offset 1:1; 'percent' maps the 0..1
+  // scroll ratio onto the other pane's (possibly different) scrollable range.
+  scrollSyncMode: 'px',
+  // When on, a plain link click opens a new (path-synced) tab instead of
+  // navigating in place. Shift+click always does this regardless of the toggle.
+  openLinksNewTab: false
 };
 let isApplyingPathSync = false;
 const tabs = new Map();
@@ -61,7 +67,9 @@ function createWindow() {
   syncState = {
     scrollSync: persisted.scrollSync || cli.scrollSync,
     pathSync: persisted.pathSync || cli.pathSync,
-    lockExternal: persisted.lockExternal || cli.lockExternal
+    lockExternal: persisted.lockExternal || cli.lockExternal,
+    scrollSyncMode: persisted.scrollSyncMode,
+    openLinksNewTab: persisted.openLinksNewTab
   };
 
   mainWindow = new BaseWindow({
@@ -134,13 +142,24 @@ function registerIpc() {
     return getSerializableState();
   });
   ipcMain.handle('set-option', (_event, { key, value }) => {
-    if (Object.prototype.hasOwnProperty.call(syncState, key)) {
+    // scrollSyncMode is a string enum, not a boolean, so validate it separately
+    // and short-circuit before the Boolean() coercion below would mangle it.
+    if (key === 'scrollSyncMode') {
+      syncState.scrollSyncMode = value === 'percent' ? 'percent' : 'px';
+      const persisted = loadOptions();
+      persisted.scrollSyncMode = syncState.scrollSyncMode;
+      saveOptions(persisted);
+      sendState();
+    } else if (Object.prototype.hasOwnProperty.call(syncState, key)) {
       syncState[key] = Boolean(value);
       // Persist only the toggled key by merging onto the on-disk value, so a
       // CLI-forced option on another key never leaks into the saved settings.
       const persisted = loadOptions();
       persisted[key] = syncState[key];
       saveOptions(persisted);
+      // Pane preloads cache this option; push the new value so links behave
+      // correctly on already-loaded pages, not just after the next navigation.
+      if (key === 'openLinksNewTab') broadcastOpenLinksNewTab();
       sendState();
     }
     return getSerializableState();
@@ -170,6 +189,54 @@ function registerIpc() {
   });
   ipcMain.on('pane-scroll', (_event, payload) => {
     handlePaneScroll(payload);
+  });
+  ipcMain.handle('get-open-links-new-tab', () => syncState.openLinksNewTab);
+  ipcMain.handle('copy-comparison', () => copyComparison());
+  ipcMain.on('open-link', (_event, payload) => {
+    handleOpenLink(payload);
+  });
+}
+
+// Copy the active tab's comparison as four lines: left title, left URL, right
+// title, right URL. Returns false when there is no active tab to copy.
+function copyComparison() {
+  const tab = getActiveTab();
+  if (!tab) return false;
+  const text = [
+    tab.titles.left || '',
+    tab.urls.left || '',
+    tab.titles.right || '',
+    tab.urls.right || ''
+  ].join('\n');
+  clipboard.writeText(text);
+  return true;
+}
+
+function broadcastOpenLinksNewTab() {
+  for (const tab of tabs.values()) {
+    for (const pane of PANE_NAMES) {
+      const wc = tab.views[pane].webContents;
+      if (!wc.isDestroyed()) wc.send('set-open-links-new-tab', syncState.openLinksNewTab);
+    }
+  }
+}
+
+// Open a link (clicked with the option on, or Shift+clicked) in a fresh tab. The
+// clicked pane loads the target; the other pane loads the same path on its own
+// origin (a one-shot path sync), mirroring the current comparison at the new URL.
+function handleOpenLink({ tabId, pane, url } = {}) {
+  if (!mainWindow || !PANE_NAMES.includes(pane) || !isHttpUrl(url)) return;
+  const sourceTab = tabs.get(tabId);
+  if (!sourceTab) return;
+  const otherPane = pane === 'left' ? 'right' : 'left';
+  const parts = pathParts(url);
+  const otherBase = sourceTab.urls[otherPane];
+  const otherUrl = (parts && withPathParts(otherBase, parts)) || otherBase;
+  createTab({
+    leftUrl: pane === 'left' ? url : otherUrl,
+    rightUrl: pane === 'right' ? url : otherUrl,
+    makeActive: true,
+    openerTabId: tabId
   });
 }
 
@@ -263,11 +330,19 @@ function buildAppMenu() {
   return Menu.buildFromTemplate(template);
 }
 
-function createTab({ leftUrl, rightUrl, makeActive }) {
+function createTab({ leftUrl, rightUrl, makeActive, openerTabId = null }) {
   const id = `tab-${nextTabId++}`;
   const tab = {
     id,
     title: 'New comparison',
+    // Per-pane page titles (title is the left title, kept for the tab label).
+    titles: {
+      left: '',
+      right: ''
+    },
+    // The tab that spawned this one (link opened in a new tab). Closing this tab
+    // returns focus here instead of jumping to the leftmost tab, if it survives.
+    openerTabId,
     views: {
       left: createPaneView(id, 'left'),
       right: createPaneView(id, 'right')
@@ -353,6 +428,7 @@ function createPaneView(tabId, pane) {
   view.webContents.on('page-title-updated', (_event, title) => {
     const tab = tabs.get(tabId);
     if (!tab) return;
+    if (title) tab.titles[pane] = title;
     if (pane === 'left' && title) tab.title = title;
     sendState();
   });
@@ -423,15 +499,30 @@ function normalizePercent(value) {
   return n;
 }
 
+// Normalize a raw pixel offset to a non-negative number, preserving null (axis
+// not scrollable on the sender) so the receiving pane leaves that axis alone.
+function normalizePixel(value) {
+  if (value === null || value === undefined) return null;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  return n < 0 ? 0 : n;
+}
+
 function handlePaneScroll(payload) {
   if (!syncState.scrollSync || !payload || payload.tabId !== activeTabId) return;
   const tab = getActiveTab();
   if (!tab || !PANE_NAMES.includes(payload.pane)) return;
   const targetPane = payload.pane === 'left' ? 'right' : 'left';
   const target = tab.views[targetPane];
-  const percentX = normalizePercent(payload.percentX);
-  const percentY = normalizePercent(payload.percentY);
-  target.webContents.send('sync-scroll-to', { percentX, percentY });
+  // Send both representations plus the active mode; the receiver picks one. This
+  // keeps the preload stateless about which unit is currently selected.
+  target.webContents.send('sync-scroll-to', {
+    mode: syncState.scrollSyncMode === 'percent' ? 'percent' : 'px',
+    percentX: normalizePercent(payload.percentX),
+    percentY: normalizePercent(payload.percentY),
+    pixelX: normalizePixel(payload.pixelX),
+    pixelY: normalizePixel(payload.pixelY)
+  });
 }
 
 function updateLoading(tabId, pane, loading) {
@@ -459,7 +550,11 @@ function closeTab(tabId) {
     tab.views[pane].webContents.close();
   }
   tabs.delete(tabId);
-  if (activeTabId === tabId) activeTabId = Array.from(tabs.keys())[0] || null;
+  if (activeTabId === tabId) {
+    // Prefer the tab that opened this one (still alive); otherwise the leftmost.
+    activeTabId =
+      (tab.openerTabId && tabs.has(tab.openerTabId) ? tab.openerTabId : Array.from(tabs.keys())[0]) || null;
+  }
   relayout();
   sendState();
 }
@@ -669,7 +764,7 @@ Usage:
 Options:
   --left <url>             Left pane URL. Overrides the first positional URL.
   --right <url>            Right pane URL. Overrides the second positional URL.
-  --scroll-sync            Enable percentage-based scroll synchronization on launch.
+  --scroll-sync            Enable scroll synchronization on launch (unit set in the UI: px or %).
   --path-sync              Enable URL path/search/hash synchronization on launch.
   --lock-external          Block navigations that change hostname.
   --width <px>             Initial window width. Default: 1440.
