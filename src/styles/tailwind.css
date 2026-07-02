@@ -24,12 +24,21 @@
 
 @layer base {
   html,
-  body,
-  #app {
+  body {
     width: 100%;
     height: 100%;
     margin: 0;
     overflow: hidden;
+  }
+
+  /*
+   * #app is content-driven (not height:100%) so its offsetHeight reflects the
+   * real chrome height, including a tab bar wrapped onto multiple rows. chrome.js
+   * observes it and reports the height to the main process, which sizes the
+   * chrome band and positions the native page webviews just below it.
+   */
+  #app {
+    width: 100%;
   }
 
   body {

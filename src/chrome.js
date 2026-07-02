@@ -18,6 +18,22 @@ const elements = {
   toasts: document.getElementById('toasts')
 };
 
+// The native page webviews are positioned just below the chrome band by the main
+// process, which needs the chrome's real height. Because the tab bar can wrap
+// onto multiple rows, report #app's measured height whenever it changes so the
+// main process can resize the band and shift the panes to match.
+const appElement = document.getElementById('app');
+let lastReportedChromeHeight = -1;
+function reportChromeHeight() {
+  const height = appElement.offsetHeight;
+  if (height === lastReportedChromeHeight) return;
+  lastReportedChromeHeight = height;
+  api.setChromeHeight(height);
+}
+if (appElement && api.setChromeHeight) {
+  new ResizeObserver(reportChromeHeight).observe(appElement);
+}
+
 api.onState((nextState) => {
   state = nextState;
   render();

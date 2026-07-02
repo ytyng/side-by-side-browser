@@ -3,7 +3,14 @@ const path = require('node:path');
 const pkg = require('../package.json');
 const { loadOptions, saveOptions } = require('./settings');
 
+// Minimum (and initial) height of the chrome band: header (38) + a single-row
+// tab bar (38) + the toolbar row (52). The tab bar can wrap onto more rows, in
+// which case chrome.js reports the taller measured height and chromeHeight grows.
 const CONTROL_HEIGHT = 128;
+// Never let the chrome band grow so tall that the page panes get less than this.
+const MIN_PANE_HEIGHT = 120;
+// Sanity ceiling for a renderer-reported height, guarding against a bogus value.
+const MAX_CONTROL_HEIGHT = 2000;
 const MIN_PANE_WIDTH = 320;
 const DIVIDER_WIDTH = 1;
 const DEFAULT_LEFT_URL = 'https://example.com';
@@ -19,6 +26,9 @@ let dividerView;
 let activeTabId = null;
 let nextTabId = 1;
 let layout = { width: 1440, height: 950 };
+// Chrome band height requested by the renderer (>= CONTROL_HEIGHT). relayout()
+// clamps it against the window so the panes always keep MIN_PANE_HEIGHT.
+let chromeHeight = CONTROL_HEIGHT;
 let syncState = {
   scrollSync: false,
   pathSync: false,
@@ -71,6 +81,11 @@ function createWindow() {
     scrollSyncMode: persisted.scrollSyncMode,
     openLinksNewTab: persisted.openLinksNewTab
   };
+
+  // Reset to a single-row band; a stale value from a previous window (macOS keeps
+  // the app alive after all windows close) would briefly mis-place the panes until
+  // the renderer's first ResizeObserver report arrives.
+  chromeHeight = CONTROL_HEIGHT;
 
   mainWindow = new BaseWindow({
     width: cli.width,
@@ -195,6 +210,24 @@ function registerIpc() {
   ipcMain.on('open-link', (_event, payload) => {
     handleOpenLink(payload);
   });
+  // The chrome renderer reports its measured height (the tab bar may span several
+  // rows). Store the clamped value and re-lay-out so the native panes sit just
+  // below the (possibly taller) chrome band.
+  ipcMain.on('set-chrome-height', (_event, height) => {
+    const next = normalizeChromeHeight(height);
+    if (next === chromeHeight) return;
+    chromeHeight = next;
+    relayout();
+  });
+}
+
+// Coerce a renderer-reported chrome height into a sane pixel value: at least the
+// single-row CONTROL_HEIGHT, capped at MAX_CONTROL_HEIGHT, ignoring non-finite
+// input so a bogus message can never break the layout.
+function normalizeChromeHeight(height) {
+  const value = Math.round(Number(height));
+  if (!Number.isFinite(value)) return CONTROL_HEIGHT;
+  return Math.min(MAX_CONTROL_HEIGHT, Math.max(CONTROL_HEIGHT, value));
 }
 
 // Copy the active tab's comparison as four lines: left title, left URL, right
@@ -577,9 +610,14 @@ function relayout() {
   const bounds = mainWindow.getBounds();
   layout = { width: bounds.width, height: bounds.height };
 
-  chromeView.setBounds({ x: 0, y: 0, width: bounds.width, height: CONTROL_HEIGHT });
+  // Clamp the renderer-requested chrome height so a tall (multi-row) tab bar can
+  // never shrink the panes below MIN_PANE_HEIGHT on a short window.
+  const maxControl = Math.max(CONTROL_HEIGHT, bounds.height - MIN_PANE_HEIGHT);
+  const control = Math.min(chromeHeight, maxControl);
 
-  const availableHeight = Math.max(1, bounds.height - CONTROL_HEIGHT);
+  chromeView.setBounds({ x: 0, y: 0, width: bounds.width, height: control });
+
+  const availableHeight = Math.max(1, bounds.height - control);
   const half = Math.max(MIN_PANE_WIDTH, Math.floor(bounds.width / 2));
   const leftWidth = Math.min(half, bounds.width - MIN_PANE_WIDTH);
   // Reserve a 1px column at x=leftWidth for the divider and shift the right pane
@@ -591,8 +629,8 @@ function relayout() {
   let hasActivePanes = false;
   for (const [tabId, tab] of tabs) {
     if (tabId === activeTabId) {
-      tab.views.left.setBounds({ x: 0, y: CONTROL_HEIGHT, width: leftWidth, height: availableHeight });
-      tab.views.right.setBounds({ x: rightX, y: CONTROL_HEIGHT, width: rightWidth, height: availableHeight });
+      tab.views.left.setBounds({ x: 0, y: control, width: leftWidth, height: availableHeight });
+      tab.views.right.setBounds({ x: rightX, y: control, width: rightWidth, height: availableHeight });
       hasActivePanes = true;
     } else {
       tab.views.left.setBounds({ x: 0, y: 0, width: 0, height: 0 });
@@ -602,7 +640,7 @@ function relayout() {
 
   if (dividerView) {
     dividerView.setVisible(hasActivePanes);
-    dividerView.setBounds({ x: leftWidth, y: CONTROL_HEIGHT, width: DIVIDER_WIDTH, height: availableHeight });
+    dividerView.setBounds({ x: leftWidth, y: control, width: DIVIDER_WIDTH, height: availableHeight });
   }
 }
 
