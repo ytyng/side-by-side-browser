@@ -228,6 +228,19 @@ function handleOpenLink({ tabId, pane, url } = {}) {
   if (!mainWindow || !PANE_NAMES.includes(pane) || !isHttpUrl(url)) return;
   const sourceTab = tabs.get(tabId);
   if (!sourceTab) return;
+  // Honor the external-navigation lock here too. The new tab loads the clicked
+  // URL via loadURL(), which does not emit will-navigate, so shouldAllowNavigation
+  // never runs for it; without this check an external link would bypass the lock
+  // through the new-tab path. Mirror shouldAllowNavigation: block only when both
+  // hostnames are known and differ.
+  if (syncState.lockExternal) {
+    const currentHostname = sourceTab.hostnames[pane] || hostnameOf(sourceTab.urls[pane]);
+    const nextHostname = hostnameOf(url);
+    if (currentHostname && nextHostname && currentHostname !== nextHostname) {
+      toast(`External navigation blocked: ${currentHostname} -> ${nextHostname}`);
+      return;
+    }
+  }
   const otherPane = pane === 'left' ? 'right' : 'left';
   const parts = pathParts(url);
   const otherBase = sourceTab.urls[otherPane];
