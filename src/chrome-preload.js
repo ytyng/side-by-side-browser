@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('sideBySide', {
   go: (pane, action) => ipcRenderer.invoke('go', { pane, action }),
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
   copyComparison: () => ipcRenderer.invoke('copy-comparison'),
+  setChromeHeight: (height) => ipcRenderer.send('set-chrome-height', height),
   onState: (callback) => {
     ipcRenderer.on('state', (_event, state) => callback(state));
   },
