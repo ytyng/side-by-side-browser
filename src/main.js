@@ -1,4 +1,4 @@
-const { app, BaseWindow, WebContentsView, View, Menu, ipcMain, shell, clipboard } = require('electron');
+const { app, BaseWindow, WebContentsView, View, Menu, ipcMain, shell, clipboard, nativeImage } = require('electron');
 const path = require('node:path');
 const pkg = require('../package.json');
 const { loadOptions, saveOptions } = require('./settings');
@@ -58,6 +58,12 @@ if (cli.version) {
 }
 
 app.whenReady().then(() => {
+  // In a packaged build macOS uses the bundle's .icns; in `pnpm start` (dev)
+  // the Dock would otherwise show the generic Electron icon, so set it here.
+  if (process.platform === 'darwin' && !app.isPackaged && app.dock) {
+    const icon = nativeImage.createFromPath(path.join(__dirname, '..', 'resources', 'icon.png'));
+    if (!icon.isEmpty()) app.dock.setIcon(icon);
+  }
   Menu.setApplicationMenu(buildAppMenu());
   createWindow();
 });
