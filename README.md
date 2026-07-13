@@ -1,5 +1,7 @@
 # Side by Side Browser
 
+https://github.com/user-attachments/assets/f495320d-163b-4c6a-8a0a-0d35a8bea555
+
 A two-pane Electron browser for comparing pages before and after a migration.
 
 Electron is used instead of Tauri because this app needs two independent native browser contents, reliable navigation events, and injected scroll synchronization for arbitrary remote pages. A normal web iframe-based UI fails on many sites because `X-Frame-Options` and CSP block embedding.
