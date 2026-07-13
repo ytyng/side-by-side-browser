@@ -38,9 +38,13 @@
       "src/**/*",
       "package.json"
     ],
+    "directories": {
+      "buildResources": "resources"
+    },
     "mac": {
       "category": "public.app-category.developer-tools",
-      "identity": null
+      "identity": null,
+      "icon": "resources/icon.png"
     }
   },
   "allowScripts": {
