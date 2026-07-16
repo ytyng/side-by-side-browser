@@ -24,6 +24,43 @@ The app chrome is styled with Tailwind CSS v4.
 - `start`, `dev`, and the `app:*`/`pack`/`dist` scripts run `tw:build` first, so `src/styles/app.css` is regenerated before the app loads or is packaged. Use `pnpm run tw:watch` while iterating on styles.
 - Icons use the vendored Bootstrap Icons font in `src/vendor/bootstrap-icons/` (`<i class="bi bi-*">`), loaded locally to satisfy the `default-src 'self'` CSP; do not switch to a CDN.
 
+## App Icon (`resources/`)
+
+`resources/` is the electron-builder **buildResources** directory. It is renamed from
+electron-builder's default `build/` via `directories.buildResources` in `package.json`, so that
+setting must stay in sync with the directory name — dropping it silently sends electron-builder
+looking in `build/` again.
+
+- `resources/icon.png` (1024×1024) is the only source of truth for the app icon. electron-builder
+  converts it to `Contents/Resources/icon.icns` at package time (`mac.icon` points at it); there is
+  no committed `.icns`.
+- The icon is a two-pane split (Bootstrap Icons `layout-split`, white on `#9a4a0f`) with a 10%
+  transparent margin around the rounded square, per the macOS app-icon convention.
+- `src/main.js` also feeds the same PNG to `app.dock.setIcon()` **in dev only** (`!app.isPackaged`);
+  a packaged build takes its icon from the bundle's `.icns`, so the dev path is what keeps
+  `pnpm start` from showing the generic Electron icon. If the PNG moves, update both the
+  `mac.icon` path and that `path.join` call.
+
+### Packaging under the Claude Code Bash sandbox
+
+`pnpm app:dir` fails in the agent sandbox for reasons unrelated to the build config. Both are
+environmental; do not "fix" them by changing `package.json`:
+
+- electron-builder downloads a PNG→ICNS toolset and caches it in
+  `~/Library/Caches/electron-builder`, which the sandbox rejects with `EPERM: mkdir`. Pre-extract
+  the bundle and point `ELECTRON_BUILDER_ICONS_TOOLSET_DIR` at it instead.
+- Do **not** work around that by redirecting `ELECTRON_BUILDER_CACHE`: it relocates the *electron*
+  cache too, forcing a fresh ~100MB electron download that the sandbox aborts mid-stream
+  (`ReadError: The server aborted pending request`). Leave the electron cache warm and override
+  only the icons toolset.
+
+```bash
+curl -sSL -o "$TMPDIR/icons-bundle.tar.gz" \
+  'https://github.com/electron-userland/electron-builder-binaries/releases/download/icons@1.1.0/icons-bundle.tar.gz'
+mkdir -p "$TMPDIR/icons-toolset" && tar -xzf "$TMPDIR/icons-bundle.tar.gz" -C "$TMPDIR/icons-toolset"
+ELECTRON_BUILDER_ICONS_TOOLSET_DIR="$TMPDIR/icons-toolset/icons-bundle" pnpm app:dir
+```
+
 ## Build Outputs
 
 Generated output lives in `dist/` and must not be committed.
