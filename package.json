@@ -1,6 +1,6 @@
 {
   "name": "side-by-side-browser",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A two-pane browser for comparing before/after migration pages.",
   "main": "src/main.js",
   "type": "commonjs",
