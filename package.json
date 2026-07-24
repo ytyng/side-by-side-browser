@@ -12,10 +12,11 @@
     "dev": "pnpm run tw:build && electron .",
     "devtools": "pnpm run tw:build && electron . --open-devtools",
     "check": "node --check src/main.js && node --check src/settings.js && node --check src/chrome-preload.js && node --check src/remote-preload.js && node --check src/chrome.js",
-    "app:dir": "pnpm run tw:build && electron-builder --dir",
+    "app:dir": "pnpm run tw:build && electron-builder --dir --arm64",
     "app:dist": "pnpm run tw:build && electron-builder",
-    "pack": "pnpm run tw:build && electron-builder --dir",
-    "dist": "pnpm run tw:build && electron-builder"
+    "pack": "pnpm run tw:build && electron-builder --dir --arm64",
+    "dist": "pnpm run tw:build && electron-builder",
+    "release": "bash scripts/release.sh"
   },
   "keywords": [
     "browser",
@@ -45,7 +46,25 @@
     "mac": {
       "category": "public.app-category.developer-tools",
       "identity": null,
-      "icon": "resources/icon.png"
+      "icon": "resources/icon.png",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": "universal"
+        },
+        {
+          "target": "zip",
+          "arch": "universal"
+        }
+      ]
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": "x64"
+        }
+      ]
     }
   },
   "allowScripts": {
