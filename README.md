@@ -40,7 +40,7 @@ Usage:
 Options:
   --left <url>             Left pane URL. Overrides the first positional URL.
   --right <url>            Right pane URL. Overrides the second positional URL.
-  --scroll-sync            Enable scroll delta synchronization on launch.
+  --scroll-sync            Enable scroll synchronization on launch (unit set in the UI: px or %).
   --path-sync              Enable URL path/search/hash synchronization on launch.
   --lock-external          Block navigations that change hostname.
   --width <px>             Initial window width. Default: 1440.
@@ -55,13 +55,33 @@ Options:
   --version                Show version.
 ```
 
+## Toolbar controls
+
+The header has three toggles plus a copy button:
+
+- **Scroll sync** — keep both panes scrolled together. The dropdown next to it
+  picks the unit: **px** (default) applies the other pane's absolute pixel offset,
+  which is exact when both pages share a layout; **%** maps the scroll ratio onto
+  each pane's own height, which is better when the two pages differ in height.
+- **URL path sync** — copy the pathname, search, and hash from one pane to the
+  other while keeping each pane's own origin.
+- **Block external navigation** — block any navigation (or opened link) that
+  changes hostname.
+- **Copy button** (right end) — copy the active tab's left title, left URL,
+  right title, and right URL to the clipboard (four lines). The icon shows a
+  checkmark for a few seconds.
+
+With **Open links in new tab** on, clicking a link opens it in a new,
+path-synced tab instead of navigating in place. **Shift+click** always does this
+regardless of the toggle.
+
 ## Keyboard shortcuts
 
 | Shortcut | Action |
 | --- | --- |
 | `Cmd+T` | New tab (both panes open blank) |
 | `Cmd+Shift+T` | Reopen the most recently closed tab |
-| `Cmd+W` | Close the active tab (no-op on the last tab; the app stays open) |
+| `Cmd+W` | Close the active tab (returns to the tab that opened it; no-op on the last tab) |
 | `Ctrl+Tab` | Next tab |
 | `Ctrl+Shift+Tab` | Previous tab |
 
