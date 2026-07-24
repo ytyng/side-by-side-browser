@@ -12,6 +12,7 @@ Use `pnpm`.
 - Audit: `pnpm audit`
 - Build unpacked local app: `pnpm app:dir`
 - Build distributable artifacts: `pnpm app:dist`
+- Cut a release: `pnpm release [patch|minor|major]`
 
 Do not add `package-lock.json` or use npm for dependency changes.
 
@@ -65,13 +66,79 @@ ELECTRON_BUILDER_ICONS_TOOLSET_DIR="$TMPDIR/icons-toolset/icons-bundle" pnpm app
 
 Generated output lives in `dist/` and must not be committed.
 
-Expected macOS outputs:
+`build.mac.target` is `dmg` + `zip`, both `universal` (Intel and Apple Silicon in one
+binary), and `build.win.target` is `nsis` on `x64`. `app:dir`/`pack` add `--arm64` so the
+unpacked local build stays a single-arch build; a universal `--dir` build downloads and
+merges two Electron distributions for no local benefit.
 
-- `dist/mac-arm64/Side by Side Browser.app`
-- `dist/Side by Side Browser-*-arm64.dmg`
-- `dist/Side by Side Browser-*-arm64-mac.zip`
+Expected outputs:
+
+- `dist/mac-arm64/Side by Side Browser.app` (from `pnpm app:dir`)
+- `dist/Side by Side Browser-*-universal.dmg`
+- `dist/Side by Side Browser-*-universal-mac.zip`
+- `dist/Side by Side Browser Setup *.exe` (Windows, CI only)
 
 `node_modules/` and `dist/` are intentionally ignored.
+
+## Release (`.github/workflows/release.yml` + `scripts/release.sh`)
+
+`pnpm release [patch|minor|major]` bumps `package.json`, pushes to `main`, triggers the
+`workflow_dispatch`-only `Release` workflow, and watches it. The workflow builds macOS and
+Windows in parallel, then a `publish` job creates the `v<version>` GitHub Release.
+
+Design decisions that are easy to undo by accident:
+
+- **Artifacts, not per-leg publishing.** Each matrix leg uploads to `actions/upload-artifact`
+  and only the `publish` job touches GitHub Releases. Letting both legs publish to the same
+  tag races, and a release containing only the faster platform is worse than no release.
+  This also keeps Apple credentials away from any third-party action.
+- **`mac.identity: null` stays in `package.json`.** That is what keeps local builds unsigned
+  (no keychain stalls). CI overrides it per-run with `-c.mac.identity="$IDENTITY"`, which
+  electron-builder deep-merges over the file config — `mac.icon` and `mac.category` survive.
+  Setting the identity to `"-"` (the Tauri ad-hoc trick) would **not** work here: a `"-"`
+  qualifier always resolves to ad-hoc signing, even when a real certificate is present.
+- **The identity prefix is stripped in the workflow.** electron-builder picks the certificate
+  *type* itself and throws if the name still starts with `Developer ID Application: `. The
+  qualifier is matched as a substring of `security find-identity` output, so the remaining
+  `Cyberneura K.K. (TEAMID)` selects the right certificate.
+- **Notarization is not a config flag.** electron-builder notarizes whenever `APPLE_ID`,
+  `APPLE_APP_SPECIFIC_PASSWORD` and `APPLE_TEAM_ID` are set *and* signing succeeded; a
+  `mac.notarize: true` entry would be redundant, and only `false` disables it. Without those
+  env vars it logs `skipped macOS notarization` and continues, which is why local builds do
+  not need any guard. **The repository secret is `APPLE_PASSWORD` but the env var must be
+  `APPLE_APP_SPECIFIC_PASSWORD`** — they are deliberately named differently.
+- **`forceCodeSigning=true` on the CI macOS build.** Without it a missing or wrong
+  certificate produces a silently unsigned dmg instead of a failed run.
+- **`CSC_LINK`/`CSC_KEY_PASSWORD` only on the macOS step.** electron-builder imports the
+  `.p12` into a throwaway keychain itself, so there is no hand-written `security import`
+  step, and the Windows leg never sees Apple credentials.
+- **`contents: read` at the workflow level, `contents: write` only on `publish`.** The
+  build job decrypts the certificate and runs a third-party action; it has no reason to
+  hold a writable token.
+- **`pnpm/action-setup` is pinned to a commit SHA**, since it runs in the same job that
+  decrypts the `.p12`. Do not pass `version:` to it — the pnpm version comes from
+  `packageManager` in `package.json`, and specifying both makes the action throw.
+- **The Windows build step sets `shell: bash`.** The default `pwsh` does not stop on a
+  failing native command mid-step, so a broken `tw:build` could ship an installer without
+  the generated `app.css`. bash on windows-latest runs with `-eo pipefail`.
+- **`concurrency.cancel-in-progress: false`.** Releases serialize (a second run queues)
+  rather than cancel. Flipping it to `true` would let a new release abort one that is
+  mid-publish, leaving a bumped version with no GitHub Release.
+- **The script is `release`, not `publish`.** `pnpm publish` is a built-in pnpm command and
+  cannot be overridden by a `scripts` entry.
+- **The version must move every run.** `gh release create` fails if `v<version>` already has
+  a release, which is the whole reason the bump is automated.
+
+Required repository secrets (registered 2026-07-24): `APPLE_CERTIFICATE`,
+`APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD`,
+`APPLE_TEAM_ID`.
+
+Known limits:
+
+- `pnpm release` pushes straight to `main`. Enabling branch protection that requires PRs
+  breaks it; that would need a tag-driven workflow instead.
+- Windows builds are produced but have never been run or tested. The installer is unsigned,
+  so SmartScreen warns on first launch.
 
 ## Electron Security Rules
 

@@ -6,6 +6,17 @@ A two-pane Electron browser for comparing pages before and after a migration.
 
 Electron is used instead of Tauri because this app needs two independent native browser contents, reliable navigation events, and injected scroll synchronization for arbitrary remote pages. A normal web iframe-based UI fails on many sites because `X-Frame-Options` and CSP block embedding.
 
+## Download
+
+Prebuilt binaries are on the [Releases page](https://github.com/ytyng/side-by-side-browser/releases).
+
+- **macOS**: `Side by Side Browser-<version>-universal.dmg` (Intel and Apple Silicon in one
+  binary). It is signed with a Developer ID certificate and notarized by Apple, so it opens
+  without a Gatekeeper warning.
+- **Windows**: `Side by Side Browser Setup <version>.exe`. This installer is **not** code
+  signed, so SmartScreen shows "Windows protected your PC" on first run. Choose
+  **More info → Run anyway**. Windows builds are produced by CI but are not regularly tested.
+
 ## Install
 
 ```bash
@@ -68,11 +79,28 @@ pnpm app:dist
 
 The output is written under `dist/`.
 
-`pnpm app:dir` creates `dist/mac-arm64/Side by Side Browser.app`.
-`pnpm app:dist` creates distributable artifacts in `dist/`.
+`pnpm app:dir` creates `dist/mac-arm64/Side by Side Browser.app` (arm64 only, for speed).
+`pnpm app:dist` creates the universal `.dmg` and `.zip` in `dist/`.
 `pnpm run pack` and `pnpm run dist` are aliases for those two commands.
 
-macOS code signing is disabled for local builds. That avoids keychain/signing stalls, but distributed builds may show Gatekeeper warnings.
+macOS code signing is disabled for local builds. That avoids keychain/signing stalls. Signed and notarized binaries come from CI only.
+
+## Release
+
+```bash
+pnpm release          # 0.1.0 -> 0.1.1 (patch)
+pnpm release minor    # 0.1.0 -> 0.2.0
+pnpm release major    # 0.1.0 -> 1.0.0
+```
+
+`main` has to be clean and in sync with `origin/main`. The script bumps the version in
+`package.json`, pushes the bump commit, triggers the `Release` workflow, and watches it
+until it finishes. The workflow builds macOS and Windows in parallel and publishes a
+GitHub Release tagged `v<version>` once both succeed.
+
+Signing and notarization need these repository secrets (already registered):
+`APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`,
+`APPLE_PASSWORD`, `APPLE_TEAM_ID`.
 
 ## Limits
 
