@@ -1,8 +1,10 @@
 name: Release
 
-# Manual runs only. Pushes never trigger a build; start a release with `pnpm release`.
+# Releases are manual only; pushes never trigger a build (start one with `pnpm release`).
+# Pull requests run the `test` job alone — never the signing/publishing jobs.
 on:
   workflow_dispatch:
+  pull_request:
 
 # Least privilege by default; only the publish job is granted contents: write.
 permissions:
@@ -11,12 +13,48 @@ permissions:
 # Serialize releases instead of cancelling: a second run queues behind the first rather
 # than aborting it. Cancelling a run mid-publish could bump the version yet leave no
 # GitHub Release for it.
+# PR ごとに別グループにして、テストの実行がリリースのキューに並ばないようにする。
 concurrency:
-  group: ${{ github.workflow }}
+  group: ${{ github.event_name == 'pull_request' && format('{0}-pr-{1}', github.workflow, github.ref) || github.workflow }}
   cancel-in-progress: false
 
 jobs:
+  # リリースの門番。
+  # 方針: https://github.com/cyberneura/cyberneura-github-actions/blob/main/docs/build-requires-tests.md
+  #
+  # 署名用の secrets を持つ build job とは分け、ubuntu で実行する。PR が持ち込んだ
+  # コードを Apple の証明書が復号される job で走らせないため。
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Syntax check
+        run: pnpm check
+
+      - name: Unit tests
+        run: pnpm test
+
   build:
+    needs: test
+    # PR ではビルドしない (署名も配布物の作成も行わない)
+    if: github.event_name == 'workflow_dispatch'
     strategy:
       # Keep the other platform going so one failure still tells us about both.
       fail-fast: false
