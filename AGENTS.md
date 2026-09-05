@@ -82,11 +82,37 @@ Expected outputs:
 
 ## Release (`.github/workflows/release.yml` + `scripts/release.sh`)
 
-`pnpm release [patch|minor|major]` bumps `package.json`, pushes to `main`, triggers the
-`workflow_dispatch`-only `Release` workflow, and watches it. The workflow builds macOS and
-Windows in parallel, then a `publish` job creates the `v<version>` GitHub Release.
+`pnpm release [patch|minor|major]` bumps `package.json`, pushes to `main`, then finds the
+`Release` run started by that push (by head SHA) and watches it. The workflow runs on every
+push to `main`: a `plan` job asks the GitHub API whether `v<version>` is already a published
+Release (404 → release, 200 → nothing to do, anything else → fail rather than guess); only
+then do `test`, `build` (macOS and Windows in parallel) and `publish` run. Pushing is what
+releases; editing `package.json` by hand and pushing does the same thing.
 
 Design decisions that are easy to undo by accident:
+
+- **"Is this version released", not "did the diff touch the version".** Squash, rebase and
+  direct push all leave a different diff but the same answer, so the workflow is idempotent:
+  a failed release is retried by pushing the fix, and no version is ever re-bumped past. No
+  `paths:` filter for the same reason (the fix does not touch `package.json`).
+- **Only 404 means "not released".** Reading a rate limit or an outage as "not released"
+  would build and publish a version that is already out.
+- **Leftover drafts are deleted by id before `gh release create`.** A draft has no tag, so
+  `releases/tags/<tag>` cannot see it; looking it up that way and creating anyway would leave
+  two drafts under one name. The publish step lists releases, refuses if a published one
+  exists, deletes every same-named draft, creates a fresh draft, counts the assets (3: dmg,
+  zip, exe) and only then publishes.
+- **`plan` is skipped on pull requests**, which skips `build` / `publish` with it; `test`
+  uses `!cancelled()` so it still runs on PRs, and on pushes only when there is a version to
+  release (a push to `main` that does not change the version costs nothing beyond `plan`).
+- **PR runs are keyed per commit in `concurrency`**, so they never queue behind a release
+  and never make one wait; releases serialise in one group with `queue: max`.
+- **Every `uses:` is pinned to a commit SHA**, not only `pnpm/action-setup`: the build job
+  decrypts the `.p12`, and a moved tag on `checkout` or `setup-node` would reach it just the
+  same. Update by looking up the SHA of the tag named in the trailing comment.
+- **The Homebrew cask is not updated from here.** `ytyng/homebrew-tap` polls the latest
+  published release every hour and rewrites the cask itself, so this repository needs no
+  tap token.
 
 - **Artifacts, not per-leg publishing.** Each matrix leg uploads to `actions/upload-artifact`
   and only the `publish` job touches GitHub Releases. Letting both legs publish to the same
@@ -112,22 +138,22 @@ Design decisions that are easy to undo by accident:
 - **`CSC_LINK`/`CSC_KEY_PASSWORD` only on the macOS step.** electron-builder imports the
   `.p12` into a throwaway keychain itself, so there is no hand-written `security import`
   step, and the Windows leg never sees Apple credentials.
-- **`contents: read` at the workflow level, `contents: write` only on `publish`.** The
-  build job decrypts the certificate and runs a third-party action; it has no reason to
-  hold a writable token.
+- **`permissions: {}` at the workflow level; `contents: read` on `plan` / `test`,
+  `contents: write` only on `publish`.** The build job decrypts the certificate and runs
+  a third-party action; it has no reason to hold a writable token. `test` runs code a PR
+  brought in, so it gets read and nothing more.
 - **`pnpm/action-setup` is pinned to a commit SHA**, since it runs in the same job that
   decrypts the `.p12`. Do not pass `version:` to it — the pnpm version comes from
   `packageManager` in `package.json`, and specifying both makes the action throw.
 - **The Windows build step sets `shell: bash`.** The default `pwsh` does not stop on a
   failing native command mid-step, so a broken `tw:build` could ship an installer without
   the generated `app.css`. bash on windows-latest runs with `-eo pipefail`.
-- **`concurrency.cancel-in-progress: false`.** Releases serialize (a second run queues)
-  rather than cancel. Flipping it to `true` would let a new release abort one that is
-  mid-publish, leaving a bumped version with no GitHub Release.
+- **`concurrency.cancel-in-progress: false` + `queue: max`.** Releases serialize (a second
+  run queues) rather than cancel. The default `queue: single` keeps one pending run and
+  cancels the rest, so a burst of pushes could drop a version; `queue: max` keeps up to 100.
+  It cannot be combined with `cancel-in-progress: true`.
 - **The script is `release`, not `publish`.** `pnpm publish` is a built-in pnpm command and
   cannot be overridden by a `scripts` entry.
-- **The version must move every run.** `gh release create` fails if `v<version>` already has
-  a release, which is the whole reason the bump is automated.
 
 Required repository secrets (registered 2026-07-24): `APPLE_CERTIFICATE`,
 `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD`,
@@ -136,7 +162,10 @@ Required repository secrets (registered 2026-07-24): `APPLE_CERTIFICATE`,
 Known limits:
 
 - `pnpm release` pushes straight to `main`. Enabling branch protection that requires PRs
-  breaks it; that would need a tag-driven workflow instead.
+  breaks the script, not the workflow: bump the version in a PR instead and the merge
+  releases it.
+- A PR that happens to carry a version change releases the moment it is merged. Keep
+  version bumps in their own commit (`pnpm release`), never inside a feature PR.
 - Windows builds are produced but have never been run or tested. The installer is unsigned,
   so SmartScreen warns on first launch.
 
