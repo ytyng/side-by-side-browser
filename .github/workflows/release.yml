@@ -349,11 +349,31 @@ jobs:
           # commit, and the release, its notes and these assets would describe
           # different revisions. Such a tag is accepted only if it already names
           # this commit; anything else stops here for a human to look at.
-          existing=$(gh api "repos/${GH_REPO}/git/ref/tags/v${VERSION}" --jq .object.sha 2>/dev/null || true)
-          if [ -n "$existing" ] && [ "$existing" != "$COMMIT" ]; then
-            echo "::error::tag v${VERSION} already exists at ${existing}, not at ${COMMIT}. Delete or move it before releasing."
-            exit 1
-          fi
+          # Only 404 means "no tag": a lookup that failed for any other reason
+          # (rate limit, outage) is not evidence of absence, so it stops too.
+          ref=$(mktemp)
+          status=$(gh api "repos/${GH_REPO}/git/ref/tags/v${VERSION}" > "$ref" 2>/dev/null \
+            && echo 200 || echo "${?}:$(head -c 200 "$ref")")
+          case "$status" in
+            200)
+              existing=$(jq -r .object.sha "$ref")
+              # An annotated tag is an object of its own; the ref names that
+              # object, not the commit, so it is peeled before comparing.
+              if [ "$(jq -r .object.type "$ref")" = "tag" ]; then
+                existing=$(gh api "repos/${GH_REPO}/git/tags/${existing}" --jq .object.sha)
+              fi
+              if [ "$existing" != "$COMMIT" ]; then
+                echo "::error::tag v${VERSION} already exists at ${existing}, not at ${COMMIT}. Delete or move it before releasing."
+                exit 1
+              fi
+              ;;
+            *"Not Found"*)
+              ;;
+            *)
+              echo "::error::could not look up tag v${VERSION} (${status}). Not guessing."
+              exit 1
+              ;;
+          esac
 
           # --target pins the tag to the commit this run built.
           gh release create "v${VERSION}" \
