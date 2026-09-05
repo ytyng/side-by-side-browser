@@ -136,6 +136,17 @@ Signing and notarization need these repository secrets (already registered):
 `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`,
 `APPLE_PASSWORD`, `APPLE_TEAM_ID`.
 
+## Agent skill
+
+`skills/side-by-side-browser/SKILL.md` teaches an AI agent (Claude Code, Codex,
+Cursor and others) to open two pages side by side for you. Install it with
+[skills](https://github.com/vercel-labs/skills):
+
+```bash
+npx skills add ytyng/side-by-side-browser        # this project
+npx skills add ytyng/side-by-side-browser -g     # every project
+```
+
 ## Limits
 
 - Domain locking uses exact hostname matching. `www.example.com` to `example.com` is blocked.
