@@ -1,16 +1,18 @@
 #!/usr/bin/env bash
-# Bump the version, push it, then trigger and watch the Release workflow.
+# Bump the version and push it, then watch the Release workflow that push starts.
 # Invoked by `pnpm release [patch|minor|major]` (default: patch).
 #
 # Flow:
 #   1. Verify the working tree is clean and HEAD == origin/main
 #   2. Compute the next version from package.json
 #   3. Rewrite the version, commit, and push
-#   4. Trigger release.yml and watch it to completion
+#   4. Find the run started by that push and watch it to completion
 #
-# The version has to move on every release: the workflow tags the release
-# `v<version>`, and `gh release create` fails outright if that tag already has a
-# release. Automating the bump removes the "forgot to bump" failure mode.
+# Pushing is what releases (release.yml runs on push to main and releases any
+# version it has not released before), not this script. Editing package.json by
+# hand and pushing does the same thing; this exists to number the version and to
+# keep an eye on the run. Nothing needs undoing if the build then fails: the
+# version is not released, so fixing the cause and pushing that fix releases it.
 #
 # Requires an authenticated gh CLI.
 set -euo pipefail
@@ -26,9 +28,9 @@ case "${BUMP}" in
     ;;
 esac
 
-# Check gh before anything is rewritten. If gh turned out to be unusable after the
-# push, the bump commit would sit on main with no workflow run behind it, and the
-# next release would skip that version entirely.
+# Check gh before anything is rewritten. The release itself starts on push, so a
+# missing gh would not stop the build; it would only leave this script unable to
+# watch it. Better to say so before pushing than to end without knowing.
 if ! command -v gh >/dev/null 2>&1; then
   echo "Error: gh CLI not found. Install it and run 'gh auth login'." >&2
   exit 1
@@ -103,27 +105,33 @@ if ! git push origin HEAD:main; then
   exit 1
 fi
 
-echo "Triggering release build for v${VERSION} ..."
+echo "Waiting for the release build of v${VERSION} ..."
 
-# workflow_dispatch does not return a run ID, so remember the newest run beforehand and
-# poll until a different one shows up.
-PREV_RUN_ID=$(gh run list --workflow=release.yml --branch main --limit 1 \
-  --json databaseId --jq '.[0].databaseId // ""')
+# The run started by the push takes a moment to show up in the API, so poll for
+# it. Look for the run whose head is the bump commit just pushed rather than the
+# newest run: another push landing meanwhile must not be the one watched. The
+# version moves every release, so exactly one run carries this SHA.
+RELEASE_SHA=$(git rev-parse HEAD)
 
-gh workflow run release.yml --ref main
-
+# `|| true` keeps a transient API error from killing the whole loop under set -e
+# (X=$(failing-cmd) exits immediately). An empty result here means "not yet".
+# 60 x 2s = 2 minutes; the run list can lag, and a shorter wait misreads that.
 RUN_ID=""
-for _ in $(seq 1 15); do
+for _ in $(seq 1 60); do
   sleep 2
-  RUN_ID=$(gh run list --workflow=release.yml --branch main --limit 1 \
-    --json databaseId --jq '.[0].databaseId // ""')
-  if [ -n "${RUN_ID}" ] && [ "${RUN_ID}" != "${PREV_RUN_ID}" ]; then
+  RUN_ID=$(gh run list --workflow=release.yml --branch main --limit 20 \
+    --json databaseId,headSha \
+    --jq "[.[] | select(.headSha == \"${RELEASE_SHA}\")] | .[0].databaseId // \"\"" \
+    2>/dev/null || true)
+  if [ -n "${RUN_ID}" ]; then
     break
   fi
-  RUN_ID=""
 done
 if [ -z "${RUN_ID}" ]; then
-  echo "Error: could not find the triggered workflow run." >&2
+  # Not found is not the same as not running: the build is most likely under way.
+  echo "Error: could not find the workflow run within 2 minutes." >&2
+  echo "  The build may still be running. Check it with:" >&2
+  echo "    gh run list --workflow=release.yml" >&2
   exit 1
 fi
 echo "Watching run ${RUN_ID} ..."

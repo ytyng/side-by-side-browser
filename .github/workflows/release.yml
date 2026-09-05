@@ -1,43 +1,147 @@
 name: Release
 
-# Releases are manual only; pushes never trigger a build (start one with `pnpm release`).
-# Pull requests run the `test` job alone — never the signing/publishing jobs.
+# Releases follow the version in package.json: change it on main and the release
+# happens. Nothing else starts one. `pnpm release [patch|minor|major]`
+# (scripts/release.sh) bumps it and pushes.
+#
+# What decides whether to release is not the diff -- squash, rebase and a direct
+# push each leave a different one -- but whether that version has been released
+# already. Asking that makes the workflow idempotent: run again over a released
+# version and nothing happens; run again over a failed one and it carries on.
+#
+# Every push to main is looked at, with no path filter. Filtering on package.json
+# would be cheaper, but it would also mean that a release which failed on the
+# build, the workflow or the code itself could not be retried by pushing the fix
+# -- the fix does not touch package.json. The check below costs a checkout and one
+# API call, which is less than the recovery it would otherwise cost.
 on:
-  workflow_dispatch:
+  push:
+    branches: [main]
+  # Pull requests run the `test` job alone -- never the signing/publishing jobs.
   pull_request:
+  # For a version that is right but whose run failed for a reason since fixed and
+  # not yet pushed. The same check applies, so this cannot republish anything.
+  workflow_dispatch:
 
-# Least privilege by default; only the publish job is granted contents: write.
-permissions:
-  contents: read
+# No permissions by default; each job asks for what it needs. `test` runs code a
+# pull request brought in, so it gets contents: read and nothing more.
+permissions: {}
 
-# Serialize releases instead of cancelling: a second run queues behind the first rather
-# than aborting it. Cancelling a run mid-publish could bump the version yet leave no
-# GitHub Release for it.
-# PR ごとに別グループにして、テストの実行がリリースのキューに並ばないようにする。
+# Releases are serialised so that two pushes in quick succession cannot build the
+# same version twice. `queue: max` holds up to 100 pending rather than the default
+# `single`, which keeps one and cancels the rest; it may not be paired with
+# `cancel-in-progress: true`.
+# A pull request's run is keyed by its commit, so it never queues behind a release
+# and never makes one wait.
 concurrency:
-  group: ${{ github.event_name == 'pull_request' && format('{0}-pr-{1}', github.workflow, github.ref) || github.workflow }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('{0}-{1}', github.ref, github.sha) || 'release' }}
   cancel-in-progress: false
+  queue: max
 
 jobs:
-  # リリースの門番。
-  # 方針: https://github.com/cyberneura/cyberneura-github-actions/blob/main/docs/build-requires-tests.md
-  #
-  # 署名用の secrets を持つ build job とは分け、ubuntu で実行する。PR が持ち込んだ
-  # コードを Apple の証明書が復号される job で走らせないため。
-  test:
+  # Answers one question before any runner is spent on a build: is this version
+  # released already? Skipped on pull requests, which takes build and publish
+  # down with it (they `need` this job and do not use always()).
+  plan:
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      release: ${{ steps.decide.outputs.release }}
     steps:
+      # A dispatch names its own ref, and a branch carrying an unreleased version
+      # would otherwise be built and published from wherever it sits. Releases come
+      # from main; a push cannot be anything else, but a dispatch can.
+      - name: Refuse to release from anywhere but main
+        if: github.ref != 'refs/heads/main'
+        env:
+          REF: ${{ github.ref }}
+        run: |
+          echo "::error::releases come from main, and this run is on ${REF}"
+          exit 1
+
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
 
+      - name: Read version
+        id: version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if [ -z "$VERSION" ]; then
+            echo "::error::could not read the version out of package.json"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Decide whether this version still needs releasing
+        id: decide
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          # This endpoint answers for published releases only -- a draft has no tag
+          # for it to find -- which is the question being asked here. A draft left
+          # by a failed run is dealt with in the publish job, which can see it.
+          #
+          # Only 404 counts as "not released". A rate limit or an outage read that
+          # way would build and publish a version that is already out.
+          status=$(gh api "repos/${GH_REPO}/releases/tags/v${VERSION}" \
+            --silent --include 2>/dev/null | head -n 1 | awk '{print $2}' || true)
+          case "$status" in
+            404)
+              echo "release=true" >> "$GITHUB_OUTPUT"
+              echo "Releasing v${VERSION}"
+              ;;
+            200)
+              echo "release=false" >> "$GITHUB_OUTPUT"
+              echo "v${VERSION} is already released; nothing to do."
+              ;;
+            *)
+              echo "::error::could not tell whether v${VERSION} exists (HTTP ${status:-none}). Not guessing."
+              exit 1
+              ;;
+          esac
+
+  # The gate in front of a release, and the check a pull request gets.
+  # Policy: https://github.com/cyberneura/cyberneura-github-actions/blob/main/docs/build-requires-tests.md
+  #
+  # Kept apart from the build job, which holds the signing secrets, so that code a
+  # pull request brought in never runs where the Apple certificate is decrypted.
+  #
+  # On a push it runs only when there is a version to release; a push to main that
+  # does not change the version costs nothing beyond `plan`. On a pull request
+  # `plan` is skipped, which would skip this job too, so !cancelled() lifts that
+  # and the event name decides (a failed plan still stops it via needs.plan.result).
+  test:
+    needs: plan
+    if: >-
+      ${{ !cancelled()
+          && (github.event_name == 'pull_request'
+              || (needs.plan.result == 'success'
+                  && needs.plan.outputs.release == 'true')) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      # The pnpm version comes from package.json's `packageManager` field; passing
+      # `version:` here as well makes the action throw on a mismatch.
       - name: Setup pnpm
         uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22
           cache: pnpm
@@ -52,9 +156,10 @@ jobs:
         run: pnpm test
 
   build:
-    needs: test
-    # PR ではビルドしない (署名も配布物の作成も行わない)
-    if: github.event_name == 'workflow_dispatch'
+    # Not without the tests. `needs` only reaches jobs in the same run, which is
+    # why the tests are not a workflow of their own.
+    needs: [plan, test]
+    if: needs.plan.outputs.release == 'true'
     strategy:
       # Keep the other platform going so one failure still tells us about both.
       fail-fast: false
@@ -68,18 +173,20 @@ jobs:
     timeout-minutes: 60
 
     steps:
+      # persist-credentials: false keeps the token out of .git/config. Everything
+      # in this job is pinned to a commit SHA because it decrypts the Apple .p12:
+      # a moved tag on any earlier step would be enough to reach the signing
+      # material. Update by looking up the SHA of the tag named in the comment.
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
 
-      # Pinned to a commit SHA: this action runs in the same job that decrypts the
-      # Apple .p12, so a hijacked tag could reach the signing material. The pnpm
-      # version comes from package.json's `packageManager` field — passing `version:`
-      # here as well makes the action throw on a version mismatch.
       - name: Setup pnpm
         uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22
           cache: pnpm
@@ -87,8 +194,32 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Syntax check
-        run: pnpm check
+      # A missing secret would not merely skip signing, it would go unnoticed:
+      # forceCodeSigning below catches a bad certificate, but notarization is
+      # switched on by the mere presence of APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD /
+      # APPLE_TEAM_ID, so an unset one ships an unnotarized dmg as though it were.
+      - name: Check macOS signing secrets
+        if: matrix.platform == 'macos-latest'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          missing=()
+          for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY \
+            APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
+            if [ -z "${!name}" ]; then
+              missing+=("$name")
+            fi
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Missing repository secrets: ${missing[*]}. Signing and notarization would be silently skipped."
+            exit 1
+          fi
+          echo "All signing and notarization secrets are present."
 
       # electron-builder imports CSC_LINK into a throwaway keychain by itself, so there
       # is no hand-written `security import` step. Notarization is not switched on by a
@@ -134,7 +265,7 @@ jobs:
       # release is worse than none: this way the release is created exactly once, only
       # after both platforms succeeded.
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: dist-${{ matrix.artifact }}
           path: |
@@ -144,18 +275,21 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  # The release is assembled as a draft and published only once every asset is
+  # there: `gh release create` uploads after creating, so a failure partway would
+  # otherwise leave a published release missing a platform.
+  # The Homebrew cask (ytyng/homebrew-tap) is not touched here: the tap's own
+  # workflow looks up the latest published release every hour and rewrites it.
   publish:
-    needs: build
+    needs: [plan, build]
+    if: needs.plan.outputs.release == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: write
     steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
       - name: Download build artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           path: artifacts
           merge-multiple: true
@@ -163,14 +297,65 @@ jobs:
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ needs.plan.outputs.version }}
+          COMMIT: ${{ github.sha }}
+          # mac dmg + mac zip + windows exe
+          EXPECTED_ASSETS: "3"
         run: |
-          VERSION=$(node -p "require('./package.json').version")
-          # Create as a draft so the release only becomes visible once every asset has
-          # finished uploading. --target pins the tag to the commit this run built.
+          # `--paginate` hands back one array per page, so the pages are flattened
+          # into a single one before anything asks a question of them.
+          set -o pipefail
+          # Drafts left by a run that failed partway are cleared, so that the same
+          # version can be built again instead of being blocked by its own remains.
+          # A published release is never touched: it is the thing this workflow
+          # exists to produce.
+          #
+          # The releases are listed rather than looked up by tag. A draft has no tag
+          # for that endpoint to find, so a lookup would report nothing and the
+          # create below would add a *second* draft under the same name -- from
+          # there, which one gets its assets counted, or published, is a coin toss.
+          releases=$(gh api "repos/${GH_REPO}/releases" --paginate --jq '.[]' | jq -s '.') || {
+            echo "::error::could not list the releases. Not guessing."
+            exit 1
+          }
+          if jq -e --arg tag "v${VERSION}" \
+            'any(.[]; .tag_name == $tag and .draft == false)' <<< "$releases" >/dev/null; then
+            echo "::error::v${VERSION} is published already; refusing to touch it."
+            exit 1
+          fi
+          # Every same-named draft, not just one: an earlier failure may have left
+          # more than one behind.
+          for id in $(jq -r --arg tag "v${VERSION}" \
+            '.[] | select(.tag_name == $tag and .draft) | .id' <<< "$releases"); do
+            # Deleted by id, and without --cleanup-tag: a draft has no tag to clean
+            # up, and asking for one fails the step after the draft is already gone.
+            echo "removing leftover draft $id"
+            gh api -X DELETE "repos/${GH_REPO}/releases/${id}"
+          done
+
+          # The checksums go into the notes so that the cask can be fixed by hand
+          # without fetching the assets again.
+          {
+            echo "## Checksums"
+            echo
+            echo '```'
+            (cd artifacts && sha256sum -- *)
+            echo '```'
+          } > "$RUNNER_TEMP/notes.md"
+
+          # --target pins the tag to the commit this run built.
           gh release create "v${VERSION}" \
-            --target "${{ github.sha }}" \
+            --draft \
+            --target "$COMMIT" \
             --title "Side by Side Browser v${VERSION}" \
             --generate-notes \
-            --draft \
+            --notes-file "$RUNNER_TEMP/notes.md" \
             artifacts/*
+
+          count=$(gh release view "v${VERSION}" --json assets --jq '.assets | length')
+          if [ "$count" -ne "$EXPECTED_ASSETS" ]; then
+            echo "::error::the draft carries $count assets, expected $EXPECTED_ASSETS; leaving it unpublished"
+            exit 1
+          fi
           gh release edit "v${VERSION}" --draft=false --latest

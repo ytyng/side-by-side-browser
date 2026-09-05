@@ -8,6 +8,14 @@ Electron is used instead of Tauri because this app needs two independent native 
 
 ## Download
 
+### Homebrew (macOS)
+
+```bash
+brew install --cask ytyng/tap/side-by-side-browser
+```
+
+### Manual download
+
 Prebuilt binaries are on the [Releases page](https://github.com/ytyng/side-by-side-browser/releases).
 
 - **macOS**: `Side by Side Browser-<version>-universal.dmg` (Intel and Apple Silicon in one
@@ -114,9 +122,15 @@ pnpm release major    # 0.1.0 -> 1.0.0
 ```
 
 `main` has to be clean and in sync with `origin/main`. The script bumps the version in
-`package.json`, pushes the bump commit, triggers the `Release` workflow, and watches it
-until it finishes. The workflow builds macOS and Windows in parallel and publishes a
-GitHub Release tagged `v<version>` once both succeed.
+`package.json`, pushes the bump commit, and watches the `Release` workflow that push
+starts. The workflow runs on every push to `main`: it checks whether `v<version>` is
+already a published GitHub Release and, if not, builds macOS and Windows in parallel and
+publishes the Release once both succeed. A push whose version is already released does
+nothing. If a run fails, fix the cause and push; the version is still unreleased, so the
+next push picks it up.
+
+The Homebrew cask in [ytyng/homebrew-tap](https://github.com/ytyng/homebrew-tap) follows
+the latest release on its own (an hourly workflow in the tap).
 
 Signing and notarization need these repository secrets (already registered):
 `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`,
