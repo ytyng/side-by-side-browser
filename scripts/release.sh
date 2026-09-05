@@ -108,9 +108,11 @@ fi
 echo "Waiting for the release build of v${VERSION} ..."
 
 # The run started by the push takes a moment to show up in the API, so poll for
-# it. Look for the run whose head is the bump commit just pushed rather than the
-# newest run: another push landing meanwhile must not be the one watched. The
-# version moves every release, so exactly one run carries this SHA.
+# it. Ask for the run whose head is the bump commit just pushed (--commit filters
+# on the server) rather than for the newest runs: another push landing meanwhile
+# must not be the one watched, and fetching the latest N and picking from them
+# could miss the target under a burst of queued releases. Exactly one run carries
+# this SHA.
 RELEASE_SHA=$(git rev-parse HEAD)
 
 # `|| true` keeps a transient API error from killing the whole loop under set -e
@@ -119,10 +121,8 @@ RELEASE_SHA=$(git rev-parse HEAD)
 RUN_ID=""
 for _ in $(seq 1 60); do
   sleep 2
-  RUN_ID=$(gh run list --workflow=release.yml --branch main --limit 20 \
-    --json databaseId,headSha \
-    --jq "[.[] | select(.headSha == \"${RELEASE_SHA}\")] | .[0].databaseId // \"\"" \
-    2>/dev/null || true)
+  RUN_ID=$(gh run list --workflow=release.yml --branch main --commit "${RELEASE_SHA}" \
+    --limit 1 --json databaseId --jq '.[0].databaseId // ""' 2>/dev/null || true)
   if [ -n "${RUN_ID}" ]; then
     break
   fi
