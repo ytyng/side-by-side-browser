@@ -160,6 +160,11 @@ jobs:
     # why the tests are not a workflow of their own.
     needs: [plan, test]
     if: needs.plan.outputs.release == 'true'
+    # Read only: checkout needs it, and nothing here writes to GitHub (the
+    # release is created by the publish job). With `permissions: {}` at the top,
+    # leaving this out would strip even read from the token.
+    permissions:
+      contents: read
     strategy:
       # Keep the other platform going so one failure still tells us about both.
       fail-fast: false
