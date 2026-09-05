@@ -12,11 +12,12 @@ refuse to be framed (`X-Frame-Options`, CSP) still load. Install with
 ## Launch
 
 ```sh
-open -n -a "Side by Side Browser" --args https://old.example.com https://new.example.com --scroll-sync --path-sync
+open -n -a "Side by Side Browser" --args "https://old.example.com/items?page=2" "https://new.example.com/items?page=2" --scroll-sync --path-sync
 ```
 
-The first URL opens on the left, the second on the right. `open` returns at
-once, so the agent is not blocked. `-n` matters: the app reads its arguments
+The first URL opens on the left, the second on the right. Quote the URLs:
+`&` and `;` in a query string would otherwise be read by the shell. `open`
+returns at once, so the agent is not blocked. `-n` matters: the app reads its arguments
 only at startup, so without it a running instance is merely brought to the
 front and the URLs are ignored. To run it in the foreground (for example to
 read `--help` or `--version`), call the binary directly:
