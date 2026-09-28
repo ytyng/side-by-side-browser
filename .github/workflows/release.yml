@@ -155,6 +155,11 @@ jobs:
       - name: Unit tests
         run: pnpm test
 
+      # The unit tests only check that the listed versions match the lockfile;
+      # this also catches a changed license text.
+      - name: Third-party notices are up to date
+        run: pnpm notices --check
+
   build:
     # Not without the tests. `needs` only reaches jobs in the same run, which is
     # why the tests are not a workflow of their own.
@@ -253,6 +258,25 @@ jobs:
           pnpm exec electron-builder --publish never \
             -c.mac.identity="$IDENTITY" \
             -c.forceCodeSigning=true
+
+      # electron-builder deletes Electron's LICENSES.chromium.html from the macOS .app.
+      # mac.extraResources in package.json puts it back, but a missing source is skipped
+      # silently, and THIRD-PARTY-NOTICES.txt points at this file.
+      - name: Check LICENSES.chromium.html is in the app (macOS)
+        if: matrix.platform == 'macos-latest'
+        run: |
+          shopt -s nullglob
+          apps=(dist/mac*/*.app)
+          if [ ${#apps[@]} -eq 0 ]; then
+            echo "::error::No .app found under dist/."
+            exit 1
+          fi
+          for app in "${apps[@]}"; do
+            test -s "$app/Contents/Resources/LICENSES.chromium.html" || {
+              echo "::error::LICENSES.chromium.html is missing from $app."
+              exit 1
+            }
+          done
 
       # Windows is unsigned; SmartScreen warns on first run (documented in the README).
       # shell: bash forces `bash -eo pipefail` instead of the default pwsh, where a

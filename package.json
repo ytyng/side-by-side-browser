@@ -11,13 +11,14 @@
     "start": "pnpm run tw:build && electron .",
     "dev": "pnpm run tw:build && electron .",
     "devtools": "pnpm run tw:build && electron . --open-devtools",
-    "check": "node --check src/main.js && node --check src/settings.js && node --check src/url-utils.js && node --check src/cli.js && node --check src/chrome-preload.js && node --check src/remote-preload.js && node --check src/chrome.js",
+    "check": "node --check src/main.js && node --check src/settings.js && node --check src/url-utils.js && node --check src/cli.js && node --check src/chrome-preload.js && node --check src/remote-preload.js && node --check src/chrome.js && node --check src/notices.js",
     "test": "node --test \"test/**/*.test.js\"",
     "app:dir": "pnpm run tw:build && electron-builder --dir --arm64",
     "app:dist": "pnpm run tw:build && electron-builder",
     "pack": "pnpm run tw:build && electron-builder --dir --arm64",
     "dist": "pnpm run tw:build && electron-builder",
-    "release": "bash scripts/release.sh"
+    "release": "bash scripts/release.sh",
+    "notices": "bash scripts/generate-third-party-notices.sh"
   },
   "keywords": [
     "browser",
@@ -39,7 +40,9 @@
     "productName": "Side by Side Browser",
     "files": [
       "src/**/*",
-      "package.json"
+      "package.json",
+      "LICENSE",
+      "THIRD-PARTY-NOTICES.txt"
     ],
     "directories": {
       "buildResources": "resources"
@@ -48,6 +51,12 @@
       "category": "public.app-category.developer-tools",
       "identity": null,
       "icon": "resources/icon.png",
+      "extraResources": [
+        {
+          "from": "node_modules/electron/dist/LICENSES.chromium.html",
+          "to": "LICENSES.chromium.html"
+        }
+      ],
       "target": [
         {
           "target": "dmg",

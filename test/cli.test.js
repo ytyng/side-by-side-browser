@@ -64,6 +64,11 @@ describe('parseCli', () => {
     assert.equal(parseCli(['-v']).version, true);
   });
 
+  it('recognizes --license', () => {
+    assert.equal(parseCli([]).license, false);
+    assert.equal(parseCli(['--license']).license, true);
+  });
+
   it('clamps the window size', () => {
     assert.equal(parseCli(['--width=100']).width, 900);
     assert.equal(parseCli(['--width=99999']).width, 4000);

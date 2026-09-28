@@ -1,4 +1,15 @@
-const { app, BaseWindow, WebContentsView, View, Menu, ipcMain, shell, clipboard, nativeImage } = require('electron');
+const {
+  app,
+  BaseWindow,
+  BrowserWindow,
+  WebContentsView,
+  View,
+  Menu,
+  ipcMain,
+  shell,
+  clipboard,
+  nativeImage
+} = require('electron');
 const path = require('node:path');
 const pkg = require('../package.json');
 const { loadOptions, saveOptions } = require('./settings');
@@ -13,6 +24,7 @@ const {
   trimUrl
 } = require('./url-utils');
 const { parseCli, helpText } = require('./cli');
+const { NOTICES_PATH, readNotices } = require('./notices');
 
 // Minimum (and initial) height of the chrome band: header (38) + a single-row
 // tab bar (38) + the toolbar row (52). The tab bar can wrap onto more rows, in
@@ -30,6 +42,7 @@ const PANE_NAMES = ['left', 'right'];
 const MAX_CLOSED_TABS = 25;
 
 let mainWindow;
+let licensesWindow = null;
 let chromeView;
 let dividerView;
 let activeTabId = null;
@@ -63,6 +76,11 @@ if (cli.help) {
 
 if (cli.version) {
   console.log(pkg.version);
+  process.exit(0);
+}
+
+if (cli.license) {
+  process.stdout.write(readNotices());
   process.exit(0);
 }
 
@@ -365,13 +383,34 @@ function handleShortcutInput(event, input) {
 function buildAppMenu() {
   const isMac = process.platform === 'darwin';
   const template = [
-    ...(isMac ? [{ role: 'appMenu' }] : []),
+    // Spelled out instead of `role: 'appMenu'` so Third-Party Licenses can sit
+    // right below About.
+    ...(isMac
+      ? [
+          {
+            label: app.name,
+            submenu: [
+              { role: 'about' },
+              { label: 'Third-Party Licenses', click: () => showThirdPartyLicenses() },
+              { type: 'separator' },
+              { role: 'services' },
+              { type: 'separator' },
+              { role: 'hide' },
+              { role: 'hideOthers' },
+              { role: 'unhide' },
+              { type: 'separator' },
+              { role: 'quit' }
+            ]
+          }
+        ]
+      : []),
     {
       label: 'File',
       submenu: [
         { label: 'New Tab', accelerator: 'CmdOrCtrl+T', click: () => openNewTab() },
         { label: 'Reopen Closed Tab', accelerator: 'CmdOrCtrl+Shift+T', click: () => reopenClosedTab() },
-        { label: 'Close Tab', accelerator: 'CmdOrCtrl+W', click: () => closeTab(activeTabId) },
+        // Cmd+W in the licenses window closes that window, not a comparison tab.
+        { label: 'Close Tab', accelerator: 'CmdOrCtrl+W', click: () => closeTabOrLicensesWindow() },
         { type: 'separator' },
         // Close Window moves to Cmd+Shift+W so Cmd+W closes the active tab, not
         // the window. On non-mac, keep Quit here.
@@ -386,9 +425,51 @@ function buildAppMenu() {
         { label: 'Previous Tab', accelerator: 'Control+Shift+Tab', click: () => cycleTab(-1) }
       ]
     },
-    { role: 'windowMenu' }
+    { role: 'windowMenu' },
+    // There is no app menu outside macOS, so the licenses live under Help there.
+    ...(isMac
+      ? []
+      : [{ role: 'help', submenu: [{ label: 'Third-Party Licenses', click: () => showThirdPartyLicenses() }] }])
   ];
   return Menu.buildFromTemplate(template);
+}
+
+function closeTabOrLicensesWindow() {
+  if (licensesWindow && !licensesWindow.isDestroyed() && licensesWindow.isFocused()) {
+    licensesWindow.close();
+    return;
+  }
+  closeTab(activeTabId);
+}
+
+// Shows THIRD-PARTY-NOTICES.txt as plain text in its own window. The page is a
+// static local file, but the window still gets the same locked-down
+// webPreferences as everything else (no preload, no Node) and may not navigate
+// or open windows.
+function showThirdPartyLicenses() {
+  if (licensesWindow && !licensesWindow.isDestroyed()) {
+    licensesWindow.focus();
+    return;
+  }
+  licensesWindow = new BrowserWindow({
+    width: 760,
+    height: 720,
+    title: 'Third-Party Licenses',
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true
+    }
+  });
+  // Keep the fixed title; a text/plain page would otherwise rename the window
+  // to the file path.
+  licensesWindow.on('page-title-updated', (event) => event.preventDefault());
+  licensesWindow.on('closed', () => {
+    licensesWindow = null;
+  });
+  licensesWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  licensesWindow.webContents.on('will-navigate', (event) => event.preventDefault());
+  licensesWindow.loadFile(NOTICES_PATH);
 }
 
 function createTab({ leftUrl, rightUrl, makeActive, openerTabId = null }) {

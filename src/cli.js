@@ -10,6 +10,7 @@ function parseCli(argv) {
   const result = {
     help: false,
     version: false,
+    license: false,
     left: null,
     right: null,
     positionals: [],
@@ -31,6 +32,7 @@ function parseCli(argv) {
     if (arg === '--') continue;
     if (arg === '--help' || arg === '-h') result.help = true;
     else if (arg === '--version' || arg === '-v') result.version = true;
+    else if (arg === '--license') result.license = true;
     else if (arg === '--left') result.left = argv[++index];
     else if (arg.startsWith('--left=')) result.left = arg.slice('--left='.length);
     else if (arg === '--right') result.right = argv[++index];
@@ -86,7 +88,8 @@ Options:
   --allow-popups           Allow popup windows. Default: blocked.
   --open-devtools          Open devtools for the app chrome and page views.
   --help                   Show help.
-  --version                Show version.`;
+  --version                Show version.
+  --license                Show the licenses of bundled third-party software.`;
 }
 
 module.exports = { parseCli, clampInt, helpText };
