@@ -166,7 +166,12 @@ the app. To read it from the app:
 
 - macOS: **Side by Side Browser > Third-Party Licenses** (right below About)
 - Windows / Linux: **Help > Third-Party Licenses**
-- Command line: `--license` prints it and exits
+- Command line: `--license` prints it and exits. On macOS run the binary directly
+  (`open --args` does not show the output):
+  `"/Applications/Side by Side Browser.app/Contents/MacOS/Side by Side Browser" --license`
+
+Chromium's own notices are in `LICENSES.chromium.html`, shipped in the app's
+`Contents/Resources` on macOS.
 
 The file is generated; do not edit it by hand. After adding or upgrading a dependency,
 regenerate it and commit the result:

@@ -9,8 +9,9 @@
 #
 # What ships, and therefore what is listed:
 #   - Electron (the runtime itself). Chromium and the other components inside
-#     Electron have their own notices file, LICENSES.chromium.html, which
-#     Electron distributes with the runtime; it is referenced, not expanded.
+#     Electron have their own notices file, LICENSES.chromium.html; it is
+#     referenced, not expanded. electron-builder strips it from the macOS .app,
+#     so package.json's mac.extraResources copies it back.
 #   - Production npm dependencies, transitively: electron-builder copies them
 #     into the asar together with src/. Read from `pnpm list --prod`.
 #   - Assets that come from devDependencies but still end up in the app:
@@ -122,9 +123,9 @@ entry(
   electronPkg,
   [
     "Electron embeds Chromium, Node.js and other components. Their licenses and",
-    "notices are in LICENSES.chromium.html, which Electron distributes with the",
-    "runtime (it is part of every Electron release archive, e.g.",
-    `https://github.com/electron/electron/releases/tag/v${electronPkg.version}).`,
+    "notices are in LICENSES.chromium.html, which ships with the app (on macOS in",
+    "Side by Side Browser.app/Contents/Resources) and is part of every Electron",
+    `release archive (https://github.com/electron/electron/releases/tag/v${electronPkg.version}).`,
   ].join("\n"),
 );
 

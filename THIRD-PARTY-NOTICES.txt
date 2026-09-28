@@ -16,9 +16,9 @@ Used by:
   electron 42.5.0 (https://github.com/electron/electron)
 
 Electron embeds Chromium, Node.js and other components. Their licenses and
-notices are in LICENSES.chromium.html, which Electron distributes with the
-runtime (it is part of every Electron release archive, e.g.
-https://github.com/electron/electron/releases/tag/v42.5.0).
+notices are in LICENSES.chromium.html, which ships with the app (on macOS in
+Side by Side Browser.app/Contents/Resources) and is part of every Electron
+release archive (https://github.com/electron/electron/releases/tag/v42.5.0).
 
 Copyright (c) Electron contributors
 Copyright (c) 2013-2020 GitHub Inc.
