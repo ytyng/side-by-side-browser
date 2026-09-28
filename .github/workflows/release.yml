@@ -253,6 +253,10 @@ jobs:
           # so strip it (a no-op if the secret is stored without the prefix).
           IDENTITY="${APPLE_SIGNING_IDENTITY#Developer ID Application: }"
           pnpm run tw:build
+          # Electron 42 has no postinstall: node_modules/electron/dist is downloaded on
+          # first use. mac.extraResources copies LICENSES.chromium.html from there, and
+          # electron-builder skips a missing source with only a log line.
+          node node_modules/electron/install.js
           # forceCodeSigning turns a missing/incorrect certificate into a failed build
           # instead of a silently unsigned dmg.
           pnpm exec electron-builder --publish never \
