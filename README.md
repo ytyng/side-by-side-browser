@@ -61,6 +61,7 @@ Options:
   --open-devtools          Open devtools for the app chrome and page views.
   --help                   Show help.
   --version                Show version.
+  --license                Show the licenses of bundled third-party software.
 ```
 
 ## Toolbar controls
@@ -152,3 +153,25 @@ npx skills add ytyng/side-by-side-browser -g     # every project
 - Domain locking uses exact hostname matching. `www.example.com` to `example.com` is blocked.
 - Scroll sync works by injected JavaScript. It can fail on browser-internal pages, crashed pages, and some unusual document modes.
 - Each tab owns two web contents. Many tabs will use a lot of memory.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
+
+## Third-party licenses
+
+The app ships Electron (with Chromium) and a few open source assets. Their licenses are
+collected in [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt), which is packaged into
+the app. To read it from the app:
+
+- macOS: **Side by Side Browser > Third-Party Licenses** (right below About)
+- Windows / Linux: **Help > Third-Party Licenses**
+- Command line: `--license` prints it and exits
+
+The file is generated; do not edit it by hand. After adding or upgrading a dependency,
+regenerate it and commit the result:
+
+```bash
+pnpm notices            # rewrite THIRD-PARTY-NOTICES.txt
+pnpm notices --check    # exit 1 if it is out of date (runs in CI)
+```

@@ -155,6 +155,11 @@ jobs:
       - name: Unit tests
         run: pnpm test
 
+      # The unit tests only check that the listed versions match the lockfile;
+      # this also catches a changed license text.
+      - name: Third-party notices are up to date
+        run: pnpm notices --check
+
   build:
     # Not without the tests. `needs` only reaches jobs in the same run, which is
     # why the tests are not a workflow of their own.
