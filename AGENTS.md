@@ -133,6 +133,15 @@ Design decisions that are easy to undo by accident:
   env vars it logs `skipped macOS notarization` and continues, which is why local builds do
   not need any guard. **The repository secret is `APPLE_PASSWORD` but the env var must be
   `APPLE_APP_SPECIFIC_PASSWORD`** — they are deliberately named differently.
+- **The dmg is notarized by the workflow, not by electron-builder.** electron-builder
+  notarizes and staples the `.app` only. `dmg.sign: true` in `package.json` makes it sign
+  the dmg as well (locally `mac.identity: null` makes that a no-op), and the
+  `Notarize and staple the dmg` step submits it with `notarytool --wait`, failing on a
+  non-zero exit or a status other than `Accepted` (printing `notarytool log`), then staples
+  it and checks it with `stapler validate` and `spctl --type open`. A signed but
+  unnotarized dmg is rejected by Gatekeeper when downloaded; an unsigned one is rejected as
+  `no usable signature` even though the `.app` inside is notarized. Stapling rewrites the
+  dmg, so it happens before the upload and the checksums.
 - **`forceCodeSigning=true` on the CI macOS build.** Without it a missing or wrong
   certificate produces a silently unsigned dmg instead of a failed run.
 - **`CSC_LINK`/`CSC_KEY_PASSWORD` only on the macOS step.** electron-builder imports the
