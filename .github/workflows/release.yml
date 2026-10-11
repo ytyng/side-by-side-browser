@@ -282,6 +282,50 @@ jobs:
             }
           done
 
+      # electron-builder notarizes and staples the .app only. `dmg.sign` in package.json
+      # signs the dmg, but a signed, unnotarized dmg is still rejected by Gatekeeper when
+      # it is downloaded and opened (spctl --type open), so the dmg is notarized here.
+      # Stapling rewrites the dmg, so this runs before the upload (and before the
+      # checksums the publish job writes into the notes).
+      - name: Notarize and staple the dmg (macOS)
+        if: matrix.platform == 'macos-latest'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          shopt -s nullglob
+          dmgs=(dist/*.dmg)
+          if [ ${#dmgs[@]} -ne 1 ]; then
+            echo "::error::expected exactly one dmg under dist/, found ${#dmgs[@]}: ${dmgs[*]}"
+            exit 1
+          fi
+          DMG="${dmgs[0]}"
+          # Unsigned here would mean dmg.sign found no Developer ID identity and
+          # returned without a word; notarizing it would not make spctl accept it.
+          codesign --verify --verbose=2 "$DMG"
+          # Judged on both the exit code and the status: the step keeps going after a
+          # non-zero submit so that the output and the notarization log (the reason
+          # for an Invalid) are printed before it fails.
+          rc=0
+          result=$(xcrun notarytool submit "$DMG" \
+            --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID" \
+            --wait --output-format json) || rc=$?
+          echo "$result"
+          status=$(jq -r '.status // empty' <<< "$result" 2>/dev/null || true)
+          if [ "$rc" -ne 0 ] || [ "$status" != "Accepted" ]; then
+            id=$(jq -r '.id // empty' <<< "$result" 2>/dev/null || true)
+            if [ -n "$id" ]; then
+              xcrun notarytool log "$id" \
+                --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID" || true
+            fi
+            echo "::error::notarization of the dmg failed (exit ${rc}, status '${status:-none}')"
+            exit 1
+          fi
+          xcrun stapler staple "$DMG"
+          xcrun stapler validate "$DMG"
+          spctl --assess --type open --context context:primary-signature -vv "$DMG"
+
       # Windows is unsigned; SmartScreen warns on first run (documented in the README).
       # shell: bash forces `bash -eo pipefail` instead of the default pwsh, where a
       # failing `pnpm run tw:build` would not stop the step and could ship an installer
